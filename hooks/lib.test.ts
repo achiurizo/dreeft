@@ -42,6 +42,10 @@ describe('focus terms', () => {
     ])
   })
 
+  test('topTerms: a name mentioned once is not focus yet', () => {
+    expect(topTerms([{ t: 'once', n: 1 }, { t: 'twice', n: 2 }], 3)).toEqual([{ t: 'twice', n: 2 }])
+  })
+
   test('topTerms: highest count first, the most recent first on a tie', () => {
     const focus = [
       { t: 'old', n: 2 },
