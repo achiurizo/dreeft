@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { braille, formatGrowth, formatTokens, growthTrail, metaRow } from './lib'
+import { braille, formatGrowth, formatTokens, formatTurnsLeft, growthTrail, metaRow, turnsLeft } from './lib'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -66,5 +66,40 @@ describe('metaRow', () => {
   })
   test('null growth shows metadata only, no trail', () => {
     expect(text(metaRow(meta, null, [3], 56))).toBe('◆ 12s · 3 blk · 1.8k out')
+  })
+  test('turns left goes last, dim, and drops before the trail', () => {
+    const row = metaRow(meta, 0.62, [1, 2], 84, 14)
+    expect(text(row).endsWith('  ~14t left')).toBe(true)
+    expect(row.find(s => s.text === '~14t left')?.tone).toBe('dim')
+    expect(text(metaRow(meta, 0.62, [1, 2], 50, 14))).not.toContain('left')
+    expect(text(metaRow(meta, 0.62, [1, 2], 50, 14))).toContain('+0.6% ')
+  })
+  test('turns left at 5 or fewer is amber', () => {
+    expect(metaRow(meta, 0.62, [], 84, 5).find(s => s.text === '~5t left')?.tone).toBe('warn')
+  })
+  test('null turns left adds nothing', () => {
+    expect(text(metaRow(meta, 0.62, [], 84, null))).not.toContain('left')
+  })
+})
+
+describe('turnsLeft', () => {
+  test('remaining window over mean growth of recent turns, floored', () => {
+    // 60% left, mean growth 4 points per turn -> 15 turns
+    expect(turnsLeft(400_000, 1_000_000, [2, 6])).toBe(15)
+  })
+  test('only the last 5 growing turns count; zero and negative (compaction) turns are skipped', () => {
+    expect(turnsLeft(500_000, 1_000_000, [50, 1, 1, -38, 0, 1, 1, 1])).toBe(50)
+  })
+  test('no growing turn yet, or no window: null', () => {
+    expect(turnsLeft(1000, 1_000_000, [])).toBeNull()
+    expect(turnsLeft(1000, 1_000_000, [0, -3])).toBeNull()
+    expect(turnsLeft(1000, 0, [2])).toBeNull()
+  })
+  test('a full or overfull window is 0, never negative', () => {
+    expect(turnsLeft(1_100_000, 1_000_000, [2])).toBe(0)
+  })
+  test('format caps at 99+', () => {
+    expect(formatTurnsLeft(14)).toBe('~14t left')
+    expect(formatTurnsLeft(140)).toBe('99+t left')
   })
 })

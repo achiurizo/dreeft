@@ -2,14 +2,16 @@ import { atom, read, update } from 'claude-code'
 import type { Register, Timer, TurnStepChunk } from 'claude-code'
 
 import type { Ctx, ThinkingTail, TurnMeta } from '../types'
-import { appendTail, clipTail, metaRow, shimmerSegments } from './lib'
+import { appendTail, metaRow, shimmerSegments, turnsLeft, wrapTail } from './lib'
 import type { Seg } from './lib'
 
 export const TICK_MS = 80
 export const WINDOW = 4
-export const MAX_WIDTH = 56
+export const MAX_WIDTH = 84
+export const WIDTH_SHARE = 0.6
 export const MIN_WIDTH = 12
-export const BUFFER = 200
+export const THOUGHT_ROWS = 3
+export const BUFFER = 1200
 
 export const EMPTY: ThinkingTail = { tail: '', live: false, phase: 0 }
 export const line = atom({ plugin: 'whispered-thoughts', key: 'line' } as const, EMPTY)
@@ -162,27 +164,40 @@ export const register: Register = on => {
     const c = await read($, ctx)
     if (e.surface !== 'terminal' || e.props.hasSurvey) return next(e)
 
-    const width = Math.min(MAX_WIDTH, Math.floor(e.props.bodyColumns / 2))
+    const width = Math.min(MAX_WIDTH, Math.floor(e.props.bodyColumns * WIDTH_SHARE))
     if (width < MIN_WIDTH) return next(e)
 
     const rows: Seg[][] = []
     if (e.props.isWorking && s.tail !== '') {
-      const text = clipTail(s.tail, width)
-      const runs = s.live ? shimmerSegments(text, s.phase, WINDOW) : [{ text, dim: true }]
-      rows.push(runs.map(run => ({ text: run.text, tone: run.dim ? 'dim' : 'bright' })))
+      // Always the full count, padded on top, so the band never grows as words arrive; one row stays for the meta.
+      const count = Math.max(1, Math.min(THOUGHT_ROWS, e.props.maxRows - 1))
+      const lines = wrapTail(s.tail, width, count)
+      while (lines.length < count) lines.unshift('')
+      lines.forEach((text, i) => {
+        if (text === '') return rows.push([{ text: ' ', tone: 'dim' }])
+        if (i === lines.length - 1 && s.live) {
+          return rows.push(shimmerSegments(text, s.phase, WINDOW).map(run => ({ text: run.text, tone: run.dim ? 'dim' : 'bright' })))
+        }
+        rows.push([{ text, tone: i < lines.length - 2 ? 'faint' : 'dim' }])
+      })
     }
     if (t) {
       const growth = t.done ? t.final : growthOf(t, c)
       // Once done, the turn's own growth is already the trail's last entry.
       const history = t.done && t.final !== null ? turns.slice(0, -1) : turns
-      const meta = metaRow(t, growth, history, width)
+      const left = c ? turnsLeft(c.tokens, c.window, turns) : null
+      const meta = metaRow(t, growth, history, width, left)
       if (meta.length > 0) rows.push(meta)
     }
     if (rows.length === 0) return next(e)
 
     const { Box, Text } = $.ui.resolve(e)
     const seg = (part: Seg) =>
-      part.tone === 'dim' ? (
+      part.tone === 'faint' ? (
+        <Text color="gray" dimColor>
+          {part.text}
+        </Text>
+      ) : part.tone === 'dim' ? (
         <Text dimColor>{part.text}</Text>
       ) : part.tone === 'warn' ? (
         <Text color="yellow">{part.text}</Text>

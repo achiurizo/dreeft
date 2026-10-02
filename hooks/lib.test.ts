@@ -1,42 +1,53 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { appendTail, clipTail, shimmerSegments } from './lib'
+import { appendTail, shimmerSegments, wrapTail } from './lib'
 
 describe('appendTail', () => {
   test('collapses whitespace runs, newlines included', () => {
     expect(appendTail('a  b', '\n\n c\t', 200)).toBe('a b c ')
   })
 
-  test('keeps the last max code points', () => {
-    expect(appendTail('abcdef', 'gh', 4)).toBe('efgh')
+  test('over max, trims to half at once so the wrap stays put between trims', () => {
+    expect(appendTail('abcdefgh', 'ij', 8)).toBe('ghij')
+  })
+
+  test('the trim starts after a space when one is in the kept half', () => {
+    expect(appendTail('aaaa bbbb cc', 'dd', 12)).toBe('ccdd')
+    expect(appendTail('aaaaaa bb c', 'dd', 12)).toBe('bb cdd')
   })
 
   test('never splits a surrogate pair when trimming', () => {
-    expect(appendTail('x😀y', 'z', 3)).toBe('😀yz')
+    expect(appendTail('abcde😀f', 'g', 7)).toBe('😀fg')
   })
 })
 
-describe('clipTail', () => {
-  test('fits unchanged', () => {
-    expect(clipTail('short line', 20)).toBe('short line')
+describe('wrapTail', () => {
+  test('fits in one line unchanged', () => {
+    expect(wrapTail('short line', 20, 3)).toEqual(['short line'])
   })
 
-  test('overflow gets an ellipsis and cuts after a space', () => {
-    expect(clipTail('the quick brown fox jumps over', 20)).toBe('…fox jumps over')
+  test('greedy word wrap one cell short of width, newest line last', () => {
+    expect(wrapTail('the quick brown fox jumps over', 11, 3)).toEqual(['the quick', 'brown fox', 'jumps over'])
   })
 
-  test('hard-cuts text with no space in the window', () => {
-    const out = clipTail('/a/very/long/path/without/any/spaces/at/all', 16)
-    expect(out).toBe('…y/spaces/at/all')
-    expect(Array.from(out)).toHaveLength(16)
+  test('keeps the last rows; the first kept line gets an ellipsis', () => {
+    expect(wrapTail('one two three four five six', 9, 2)).toEqual(['…four', 'five six'])
   })
 
-  test('counts code points, so emoji at the cut stay whole', () => {
-    expect(clipTail('😀😀😀😀😀😀😀😀😀😀', 5)).toBe('…😀😀😀😀')
+  test('the ellipsis never pushes a line past width', () => {
+    expect(wrapTail('aaaa bbbbbbbbb cc', 9, 2)).toEqual(['…bbbbbbbb', 'b cc'])
   })
 
-  test('drops leading space after the ellipsis', () => {
-    expect(clipTail('aaaaaaaaaa bbbb', 6)).toBe('…bbbb')
+  test('hard-splits a word longer than width', () => {
+    expect(wrapTail('/a/very/long/path', 6, 3)).toEqual(['…ry/lo', 'ng/pa', 'th'])
+  })
+
+  test('counts code points', () => {
+    expect(wrapTail('😀😀😀 😀😀', 4, 2)).toEqual(['😀😀😀', '😀😀'])
+  })
+
+  test('empty or blank text gives no lines', () => {
+    expect(wrapTail('  ', 10, 3)).toEqual([])
   })
 })
 

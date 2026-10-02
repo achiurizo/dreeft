@@ -1,6 +1,6 @@
 {
   "name": "whispered-thoughts",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Dim shimmering line above the prompt showing the live tail of the session's thinking",
   "types": "./types/index.d.ts"
 }

@@ -1,21 +1,48 @@
 export type Run = { text: string; dim: boolean }
 
-/** Append a thinking piece, collapse whitespace, keep the last `max` code points. */
+/**
+ * Append a thinking piece and collapse whitespace. Past `max` code points, trim to the last half
+ * at once (from a word start when one is near), so the wrapped rows hold still between trims.
+ */
 export function appendTail(prev: string, piece: string, max: number): string {
   const joined = (prev + piece).replace(/\s+/g, ' ')
   const points = Array.from(joined)
-  return points.length <= max ? joined : points.slice(-max).join('')
+  if (points.length <= max) return joined
+  const from = points.length - Math.floor(max / 2)
+  let kept = points.slice(from)
+  if (points[from - 1] !== ' ') {
+    const space = kept.indexOf(' ')
+    if (space !== -1) kept = kept.slice(space + 1)
+  }
+  return kept.join('')
 }
 
-/** Fit `buf` into `width` cells from its end, `…`-prefixed, cut after a space when one is near. */
-export function clipTail(buf: string, width: number): string {
-  const points = Array.from(buf)
-  if (points.length <= width) return buf
-  let suffix = points.slice(-(width - 1))
-  const space = suffix.slice(0, 12).indexOf(' ')
-  if (space !== -1) suffix = suffix.slice(space + 1)
-  while (suffix[0] === ' ') suffix = suffix.slice(1)
-  return '…' + suffix.join('')
+/**
+ * The last `rows` lines of `text`, word-wrapped one cell short of `width` so a `…` always fits on
+ * the first kept line when older lines were dropped. A word longer than a line is hard-split.
+ */
+export function wrapTail(text: string, width: number, rows: number): string[] {
+  const max = width - 1
+  const lines: string[][] = []
+  let cur: string[] = []
+  for (const word of text.split(' ')) {
+    let w = Array.from(word)
+    if (w.length === 0) continue
+    if (cur.length > 0 && cur.length + 1 + w.length <= max) {
+      cur.push(' ', ...w)
+      continue
+    }
+    if (cur.length > 0) lines.push(cur)
+    while (w.length > max) {
+      lines.push(w.slice(0, max))
+      w = w.slice(max)
+    }
+    cur = w
+  }
+  if (cur.length > 0) lines.push(cur)
+  const kept = lines.slice(-rows).map(l => l.join(''))
+  if (lines.length > rows) kept[0] = '…' + kept[0]
+  return kept
 }
 
 /**
@@ -39,7 +66,7 @@ export function shimmerSegments(text: string, phase: number, window: number): Ru
   return runs
 }
 
-export type Tone = 'dim' | 'bright' | 'warn'
+export type Tone = 'faint' | 'dim' | 'bright' | 'warn'
 export type Seg = { text: string; tone: Tone }
 export type Meta = { thinkMs: number; blocks: number; outTok: number }
 
@@ -80,6 +107,25 @@ export function formatTokens(n: number): string {
   return Math.round(n / 1000) + 'k'
 }
 
+export const TURNS_RECENT = 5
+export const TURNS_WARN = 5
+
+/**
+ * Turns until the window fills, at the mean growth of the last `recent` turns that grew. Zero and
+ * negative (compaction) turns say nothing about the pace, so they are skipped. Null without data.
+ */
+export function turnsLeft(tokens: number, window: number, history: number[], recent = TURNS_RECENT): number | null {
+  if (window <= 0) return null
+  const grew = history.filter(v => v > 0).slice(-recent)
+  if (grew.length === 0) return null
+  const mean = grew.reduce((a, b) => a + b, 0) / grew.length
+  return Math.max(0, Math.floor(((1 - tokens / window) * 100) / mean))
+}
+
+export function formatTurnsLeft(n: number): string {
+  return n > 99 ? '99+t left' : `~${n}t left`
+}
+
 export function formatGrowth(points: number): string {
   const abs = Math.abs(points)
   const body = abs < 10 ? abs.toFixed(1) : String(Math.round(abs))
@@ -88,8 +134,8 @@ export function formatGrowth(points: number): string {
 
 const width = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
 
-/** Row 2, fitted to `max` cells: drop the trail, then the token count, then the whole row. */
-export function metaRow(meta: Meta, growth: number | null, history: number[], max: number): Seg[] {
+/** Meta row, fitted to `max` cells: drop turns left, the trail, the token count, then the whole row. */
+export function metaRow(meta: Meta, growth: number | null, history: number[], max: number, left: number | null = null): Seg[] {
   const head = `◆ ${Math.round(meta.thinkMs / 1000)}s · ${meta.blocks} blk`
   const out = ` · ${formatTokens(meta.outTok)} out`
   if (growth === null) {
@@ -99,7 +145,10 @@ export function metaRow(meta: Meta, growth: number | null, history: number[], ma
   const g: Seg[] = [{ text: '   ', tone: 'dim' }, { text: formatGrowth(growth), tone }]
   const trail = growthTrail(history, growth, TRAIL_CELLS)
   const t: Seg[] = [{ text: ' ' + trail.past, tone: 'dim' }, { text: trail.now, tone }]
+  const l: Seg[] =
+    left === null ? [] : [{ text: '  ', tone: 'dim' }, { text: formatTurnsLeft(left), tone: left <= TURNS_WARN ? 'warn' : 'dim' }]
   const candidates: Seg[][] = [
+    ...(l.length > 0 ? [[{ text: head + out, tone: 'dim' as Tone }, ...g, ...t, ...l]] : []),
     [{ text: head + out, tone: 'dim' }, ...g, ...t],
     [{ text: head + out, tone: 'dim' }, ...g],
     [{ text: head, tone: 'dim' }, ...g],

@@ -38,6 +38,13 @@ function engineBand(on: On) {
   })
 }
 
+/** Thought runs: everything but the meta row and the blank padding rows. */
+async function thoughtRuns(view: Awaited<ReturnType<typeof mount>>) {
+  return (await view.findAll({ type: 'Text' })).filter(r => !r.text.startsWith('◆') && r.text.trim() !== '')
+}
+
+const TEXT_THEN: TurnStepChunk[] = [{ kind: 'text', index: 1, text: 'ok' }]
+
 function mount($: Engine, props: Partial<RenderPropsOf['AbovePrompt']> = {}, surface: RenderSurface = 'terminal') {
   return $.ui.mount({ plugin: 'whispered-thoughts', surface, component: 'AbovePrompt', props: { ...PROPS, ...props } })
 }
@@ -64,10 +71,10 @@ test('live line shimmers: some run is not dim once the window enters', async ($,
 
 test('frozen line is one dim run', async ($, on) => {
   engineBand(on)
-  const step = await thinking($, on, 'weighing', [{ kind: 'text', index: 1, text: 'ok' }])
+  const step = await thinking($, on, 'weighing', TEXT_THEN)
   const view = await mount($)
   await step.end()
-  const runs = (await view.findAll({ type: 'Text' })).filter(r => !r.text.startsWith('◆'))
+  const runs = await thoughtRuns(view)
   expect(runs).toHaveLength(1)
   expect(runs[0]?.props.dimColor).toBe(true)
   expect(runs[0]?.text).toBe('weighing')
@@ -92,7 +99,7 @@ test('yields to a survey', async ($, on) => {
 test('draws nothing on a narrow band', async ($, on) => {
   engineBand(on)
   const step = await thinking($, on, 'weighing')
-  const view = await mount($, { bodyColumns: 22 })
+  const view = await mount($, { bodyColumns: 19 })
   expect(await view.find({ text: /weighing/ })).toBeUndefined()
   await step.end()
 })
@@ -105,23 +112,56 @@ test('draws nothing on the desktop surface', async ($, on) => {
   await step.end()
 })
 
-test('caps the line at 56 cells on a wide band', async ($, on) => {
+test('three rows capped at 84 cells on a wide band, the first with an ellipsis', async ($, on) => {
   engineBand(on)
-  const step = await thinking($, on, 'word '.repeat(60))
+  const step = await thinking($, on, 'word '.repeat(80), TEXT_THEN)
+  await step.end()
   const view = await mount($, { bodyColumns: 300 })
-  const text = (await view.findAll({ type: 'Text' })).filter(r => !r.text.startsWith('◆')).map(r => r.text).join('')
-  expect(text.startsWith('…')).toBe(true)
-  expect(Array.from(text).length).toBeLessThanOrEqual(56)
+  const rows = (await thoughtRuns(view)).map(r => r.text)
+  expect(rows).toHaveLength(3)
+  expect(rows[0]?.startsWith('…')).toBe(true)
+  for (const row of rows) expect(Array.from(row).length).toBeLessThanOrEqual(84)
+  expect(rows.some(row => Array.from(row).length > 70)).toBe(true)
+})
+
+test('60% of the band on a mid-width terminal', async ($, on) => {
+  engineBand(on)
+  const step = await thinking($, on, 'word '.repeat(80), TEXT_THEN)
+  await step.end()
+  const view = await mount($, { bodyColumns: 80 })
+  for (const run of await thoughtRuns(view)) expect(Array.from(run.text).length).toBeLessThanOrEqual(48)
+})
+
+test('the oldest row is faint, the middle dim, only the newest shimmers', async ($, on) => {
+  engineBand(on)
+  const clock = mock.clock(on)
+  const step = await thinking($, on, 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda')
+  const view = await mount($, { bodyColumns: 40 })
+  await clock.advance(80 * 6)
+  const runs = await thoughtRuns(view)
+  expect(runs[0]?.props).toMatchObject({ color: 'gray', dimColor: true })
+  expect(runs[1]?.props.dimColor).toBe(true)
+  expect(runs[1]?.props.color).toBeUndefined()
+  expect(runs.slice(2).some(r => r.props.dimColor !== true)).toBe(true)
   await step.end()
 })
 
-test('half the band on a mid-width terminal', async ($, on) => {
+test('pads to three thought rows from the first words, so the band does not grow', async ($, on) => {
   engineBand(on)
-  const step = await thinking($, on, 'word '.repeat(60))
-  const view = await mount($, { bodyColumns: 80 })
-  const text = (await view.findAll({ type: 'Text' })).filter(r => !r.text.startsWith('◆')).map(r => r.text).join('')
-  expect(Array.from(text).length).toBeLessThanOrEqual(40)
+  const step = await thinking($, on, 'weighing')
+  const view = await mount($)
+  const blank = (await view.findAll({ type: 'Text' })).filter(r => r.text.trim() === '')
+  expect(blank).toHaveLength(2)
   await step.end()
+})
+
+test('a short band keeps a row for the meta: maxRows 2 leaves one thought row', async ($, on) => {
+  engineBand(on)
+  const step = await thinking($, on, 'word '.repeat(80), TEXT_THEN)
+  await step.end()
+  const view = await mount($, { maxRows: 2 })
+  expect(await thoughtRuns(view)).toHaveLength(1)
+  expect((await view.findAll({ type: 'Text' })).filter(r => r.text.trim() === '')).toHaveLength(0)
 })
 
 test('row 2 shows metadata while working', async ($, on) => {
@@ -145,6 +185,18 @@ test('idle after a turn: row 2 only, with that turn\'s growth', async ($, on) =>
   expect(await view.find({ text: '+0.6%' })).toBeDefined()
 })
 
+test('idle meta row shows turns left from the trail', async ($, on) => {
+  engineBand(on)
+  answerBelow(on)
+  const step = await thinking($, on, 'weighing', [], () => measure($, 100_000, 1_000_000))
+  await step.end()
+  await measure($, 106_000, 1_000_000)
+  await complete($, {})
+  const view = await mount($, { isWorking: false, bodyColumns: 200 })
+  // 89.4% left at 0.6 points a turn
+  expect(await view.find({ text: '99+t left' })).toBeDefined()
+})
+
 test('nothing before any turn', async ($, on) => {
   engineBand(on)
   const view = await mount($, { isWorking: false })
@@ -166,7 +218,7 @@ test('idle with null growth shows metadata without a percent', async ($, on) => 
 test('narrow band hides row 2 too', async ($, on) => {
   engineBand(on)
   const step = await thinking($, on, 'weighing')
-  const view = await mount($, { bodyColumns: 22 })
+  const view = await mount($, { bodyColumns: 19 })
   expect(await view.find({ text: /◆/ })).toBeUndefined()
   await step.end()
 })
