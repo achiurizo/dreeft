@@ -56,7 +56,7 @@ The mod only follows the main conversation. Subagent thinking and turns are igno
 
 ## Requirements
 
-- A Claude Code build with function-hook plugins (mods).
+- Claude Code v2.1.287 or later, which added mods. The mod API is still early access, so a Claude Code update can break the mod until it catches up.
 - The terminal surface. Desktop, VS Code and mobile get nothing for now.
 - Optional: thinking summaries turned on in `~/.claude/settings.json`:
 
@@ -68,19 +68,34 @@ The mod only follows the main conversation. Subagent thinking and turns are igno
 
 ## Install
 
-Clone the repo, then load it as a local plugin.
+From the marketplace, inside Claude Code:
 
-For one session:
-
-```sh
-claude --plugin-dir ~/code/whispered-thoughts
+```text
+/plugin marketplace add achiurizo/whispered-thoughts
+/plugin install whispered-thoughts@whispered-thoughts
 ```
 
-For every session, add it to the `env` block of `~/.claude/settings.json`:
+Restart Claude Code, or run `/reload-plugins`, to load it.
+
+### From source
+
+Clone the repo:
+
+```sh
+git clone https://github.com/achiurizo/whispered-thoughts.git
+```
+
+Load the clone for one session:
+
+```sh
+claude --plugin-dir ./whispered-thoughts
+```
+
+Or load the clone in every session: add its absolute path to the `env` block of `~/.claude/settings.json`.
 
 ```json
 {
-  "env": { "CLAUDE_CODE_PLUGIN_DIRS": "~/code/whispered-thoughts" }
+  "env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/whispered-thoughts" }
 }
 ```
 
@@ -123,7 +138,13 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 ```sh
 claude plugin test .              # run the tests
 claude plugin validate .          # check manifest, hooks and declared state
-bunx -p typescript tsc -p .       # type-check
+npx -p typescript tsc -p .        # type-check
 ```
 
-Type-checking needs `.claude-plugin/types/`. Claude Code generates that folder once it has loaded the mod, and it is gitignored, so a fresh clone can't type-check until the mod has loaded at least once.
+Type-checking needs `.claude-plugin/types/`. Claude Code writes that folder each time a session loads the mod from a local folder, such as with `--plugin-dir`. The folder is gitignored, so a fresh clone can't type-check until you start Claude Code once with `claude --plugin-dir .`. A marketplace install does not write it.
+
+CI runs the same three checks on every pull request.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
