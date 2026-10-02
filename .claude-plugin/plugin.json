@@ -1,7 +1,21 @@
 {
   "name": "whispered-thoughts",
-  "version": "0.6.1",
+  "version": "1.0.0",
   "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
+  "author": {
+    "name": "Arthur Chiu",
+    "url": "https://github.com/achiurizo"
+  },
+  "homepage": "https://github.com/achiurizo/whispered-thoughts",
+  "repository": "https://github.com/achiurizo/whispered-thoughts",
+  "license": "MIT",
+  "keywords": [
+    "mod",
+    "thinking",
+    "status",
+    "timeline",
+    "context"
+  ],
   "types": "./types/index.d.ts",
   "userConfig": {
     "palette": {
