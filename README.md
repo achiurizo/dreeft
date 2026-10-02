@@ -16,7 +16,7 @@ The band appears when a turn starts and stays up after it ends, until the next t
 
 **Focus row**
 
-- The three names the thinking mentions most this turn, with counts. A name is a backticked span, a file name or path, or a camelCase or snake_case identifier. Plain words don't count.
+- The three names the thinking mentions most this turn, with counts. A name has to come up at least twice to show; until one does, the row reads `∴ …`. A name is a backticked span, a file name or path, or a camelCase or snake_case identifier. Plain words don't count.
 - `⟲ 2` counts second-guesses: how often the thinking says "wait", "actually" or "hmm". Shown in amber.
 - This is a word-count heuristic, not a summary, so it can pick the wrong names.
 

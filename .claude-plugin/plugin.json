@@ -1,6 +1,6 @@
 {
   "name": "whispered-thoughts",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
   "types": "./types/index.d.ts",
   "userConfig": {

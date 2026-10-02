@@ -60,9 +60,13 @@ export function addTerms(focus: Term[], terms: string[]): Term[] {
   return out.slice(-FOCUS_MAX)
 }
 
+/** A name has to come back at least this often to count as focus. */
+export const FOCUS_MIN = 2
+
 export function topTerms(focus: Term[], k: number): Term[] {
   return focus
     .map((f, i) => ({ f, i }))
+    .filter(({ f }) => f.n >= FOCUS_MIN)
     .sort((a, b) => b.f.n - a.f.n || b.i - a.i)
     .slice(0, k)
     .map(x => x.f)
