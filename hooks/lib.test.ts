@@ -82,6 +82,24 @@ describe('shimmerSegments', () => {
     expect(shimmerSegments('abcdefgh', 12 + 6, 4)).toEqual(shimmerSegments('abcdefgh', 6, 4))
   })
 
+  test('with a span, the window sweeps the whole band and the row sits at its right edge', () => {
+    // 'ab' right-aligned in a 10-cell band occupies cells 8-9: the window's edge reaches cell 9 at phase 9
+    expect(shimmerSegments('ab', 9, 4, 10)).toEqual([
+      { text: 'a', dim: false },
+      { text: 'b', dim: true },
+    ])
+    expect(shimmerSegments('ab', 5, 4, 10)).toEqual([{ text: 'ab', dim: true }])
+  })
+
+  test('with a span, a short row repeats every span + window ticks, not every row length + window', () => {
+    expect(shimmerSegments('ab', 9 + 14, 4, 10)).toEqual(shimmerSegments('ab', 9, 4, 10))
+    expect(shimmerSegments('ab', 9 + 6, 4, 10)).toEqual([{ text: 'ab', dim: true }])
+  })
+
+  test('a span shorter than the row is the row', () => {
+    expect(shimmerSegments('abcdefgh', 6, 4, 3)).toEqual(shimmerSegments('abcdefgh', 6, 4))
+  })
+
   test('never returns an empty run', () => {
     for (let p = 0; p < 30; p++) {
       for (const run of shimmerSegments('abcdefgh', p, 4)) {

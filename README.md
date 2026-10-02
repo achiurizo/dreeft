@@ -18,8 +18,8 @@ meta row shows what the turn has cost so far:
 **Thought rows** (top three rows, only while a turn is running)
 
 - The latest thinking text, word-wrapped into three right-aligned rows. The oldest row is the faintest and the newest is brightest.
-- A bright 4-cell window sweeps across the newest row while thinking text is still arriving.
-- When the model starts writing or calls a tool, the rows freeze and stay dim. A new thinking block starts a fresh tail.
+- A bright 4-cell window sweeps across the band at a steady pace while thinking text is still arriving, lighting the newest row as it passes.
+- When the model starts writing or calls a tool, the rows freeze and stay dim. A later thinking block in the same turn continues after a `┊` separator, so the previous thought scrolls up and fades instead of vanishing. Each new turn starts empty.
 - The band always reserves all three rows, so the prompt doesn't jump as words arrive.
 
 **Meta row** (stays up after the turn ends, until the next turn starts)

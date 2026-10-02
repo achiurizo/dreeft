@@ -62,7 +62,7 @@ test('subagent steps never touch state', WITH_PROBE, async ($, on) => {
   expect((await probe($))?.tail ?? '').toBe('')
 })
 
-test('a later block in the same turn starts a fresh tail', WITH_PROBE, async ($, on) => {
+test('a later block in the same turn keeps the previous one before a separator', WITH_PROBE, async ($, on) => {
   beneath(
     on,
     [{ kind: 'thinking', index: 0, text: 'first' }, { kind: 'text', index: 1, text: 'ok' }],
@@ -71,7 +71,7 @@ test('a later block in the same turn starts a fresh tail', WITH_PROBE, async ($,
   await drain($.turn.step(STEP))
   const stream = $.turn.step({ ...STEP, index: 1 })
   await stream.next()
-  expect((await probe($))?.tail).toBe('second')
+  expect((await probe($))?.tail).toBe('first ┊ second')
   await drain(stream)
 })
 

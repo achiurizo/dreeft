@@ -91,7 +91,8 @@ export const register: Register = on => {
         const fresh = clock === undefined
         await safely(() =>
           update($, line, s => ({
-            tail: appendTail(fresh ? '' : s.tail, chunk.text, BUFFER),
+            // A later block keeps the one before it, to scroll up and fade rather than vanish.
+            tail: appendTail(fresh && s.tail !== '' ? s.tail + ' ┊ ' : s.tail, chunk.text, BUFFER),
             live: true,
             phase: fresh ? 0 : s.phase,
           })),
@@ -176,7 +177,7 @@ export const register: Register = on => {
       lines.forEach((text, i) => {
         if (text === '') return rows.push([{ text: ' ', tone: 'dim' }])
         if (i === lines.length - 1 && s.live) {
-          return rows.push(shimmerSegments(text, s.phase, WINDOW).map(run => ({ text: run.text, tone: run.dim ? 'dim' : 'bright' })))
+          return rows.push(shimmerSegments(text, s.phase, WINDOW, width).map(run => ({ text: run.text, tone: run.dim ? 'dim' : 'bright' })))
         }
         rows.push([{ text, tone: i < lines.length - 2 ? 'faint' : 'dim' }])
       })
