@@ -2,12 +2,16 @@ import type { TurnStepChunk } from 'claude-code'
 
 import type { Phase, Span, Term, TurnMeta } from '../types'
 
+/** How a segment is drawn: `faint` and `dim` recede, `warn` is amber, `think` and `tool` follow the palette. */
 export type Tone = 'faint' | 'dim' | 'bright' | 'warn' | 'think' | 'tool'
+/** A run of text in one tone; a row is a list of these. */
 export type Seg = { text: string; tone: Tone }
+/** The turn figures the meta row shows; `thinkMs` in milliseconds. */
 export type Meta = { thinkMs: number; blocks: number; tools: number; outTok: number }
 
 const width = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
 
+/** Milliseconds as whole seconds: `42s`, or `1m5s` from a minute up. */
 export function formatSecs(ms: number): string {
   const s = Math.round(ms / 1000)
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`
@@ -63,6 +67,7 @@ export function addTerms(focus: Term[], terms: string[]): Term[] {
 /** A name has to come back at least this often to count as focus. */
 export const FOCUS_MIN = 2
 
+/** The `k` most-mentioned terms with at least `FOCUS_MIN` mentions; ties go to the most recent. */
 export function topTerms(focus: Term[], k: number): Term[] {
   return focus
     .map((f, i) => ({ f, i }))
@@ -80,6 +85,7 @@ function phaseAt(spans: Span[], t: number): Phase {
   return phase
 }
 
+/** Milliseconds spent in each phase, the last span running to clock time `end`. */
 export function phaseTotals(spans: Span[], end: number): Record<Phase, number> {
   const totals: Record<Phase, number> = { wait: 0, think: 0, tool: 0, write: 0 }
   spans.forEach((s, i) => {
@@ -101,7 +107,12 @@ function phasesIn(spans: Span[], from: number, to: number, end: number): Set<Pha
   return seen
 }
 
-/** One cell per second of the turn, or whole seconds per cell once it outgrows `maxCells`. */
+/**
+ * One cell per second of the turn, or whole seconds per cell once it outgrows `maxCells`.
+ * @param start - clock time of the turn's start, in milliseconds
+ * @param end - clock time the strip runs to, in milliseconds
+ * @param maxCells - most cells the strip may take
+ */
 export function timelineCells(spans: Span[], start: number, end: number, maxCells: number): Phase[] {
   const dur = Math.max(0, end - start)
   const cellMs = 1000 * Math.max(1, Math.ceil(Math.ceil(dur / 1000) / Math.max(1, maxCells)))
@@ -118,6 +129,12 @@ export function phaseOfMode(mode: 'requesting' | 'responding' | 'thinking' | 'to
   return mode === 'thinking' ? 'think' : mode === 'responding' ? 'write' : mode === 'requesting' ? 'wait' : 'tool'
 }
 
+/**
+ * A fresh turn, waiting on the model from `started`.
+ * @param started - clock time of step 0, in milliseconds
+ * @param startTokens - context tokens at step 0, or null when nothing has been measured
+ * @param window - the context window in tokens, or 0 when unknown
+ */
 export function newTurn(started: number, startTokens: number | null, window: number): TurnMeta {
   return {
     blocks: 0,
@@ -192,7 +209,12 @@ const TOTALS: [Phase, string][] = [
 ]
 const MIN_STRIP = 8
 
-/** The turn as a strip of phase cells and its cap, then time per phase; the totals drop when they leave under 8 cells. */
+/**
+ * The turn as a strip of phase cells and its cap, then time per phase; the totals drop when they leave under 8 cells.
+ * @param start - clock time of the turn's start, in milliseconds
+ * @param end - clock time the strip runs to, in milliseconds
+ * @param max - width in terminal cells
+ */
 export function timelineRow(spans: Span[], start: number, end: number, max: number): Seg[] {
   const sums = phaseTotals(spans, end)
   const totals: Seg[] = []
@@ -214,7 +236,10 @@ export function timelineRow(spans: Span[], start: number, end: number, max: numb
   return fits ? [...strip, ...totals] : strip
 }
 
-/** `∴` then the top terms with counts, then second-guesses; terms drop from the end to fit. */
+/**
+ * `∴` then the top terms with counts, then second-guesses; terms drop from the end to fit.
+ * @param max - width in terminal cells
+ */
 export function focusRow(top: Term[], hedges: number, max: number): Seg[] {
   const tail: Seg[] = hedges > 0 ? [{ text: '   ⟲ ', tone: 'dim' }, { text: String(hedges), tone: 'warn' }] : []
   for (let k = top.length; k > 0; k--) {
@@ -229,6 +254,7 @@ export function focusRow(top: Term[], hedges: number, max: number): Seg[] {
   return hedges > 0 ? [{ text: '∴ ⟲ ', tone: 'dim' }, { text: String(hedges), tone: 'warn' }] : [{ text: '∴ …', tone: 'dim' }]
 }
 
+/** Braille cells in the meta row's growth trail, two turns per cell. */
 export const TRAIL_CELLS = 10
 const LEFT = [0, 0x40, 0x44, 0x46, 0x47]
 const RIGHT = [0, 0x80, 0xa0, 0xb0, 0xb8]
@@ -246,6 +272,9 @@ export function braille(values: number[]): string {
 /**
  * Per-turn growth as braille: `past` holds earlier turns, `now` the newest cell. Scales to the
  * largest value shown; every real turn gets at least one dot (negatives count as 0), padding none.
+ * @param history - earlier turns' growth, in points of the window, oldest first
+ * @param current - this turn's growth in points, or null when unmeasured
+ * @param cells - braille cells to draw, two turns each
  */
 export function growthTrail(history: number[], current: number | null, cells: number): { past: string; now: string } {
   const real = [...history, current ?? 0].map(v => Math.max(0, v)).slice(-cells * 2)
@@ -260,20 +289,25 @@ export function growthTrail(history: number[], current: number | null, cells: nu
   return { past: draw(levels.slice(0, -2)), now: draw(levels.slice(-2)) }
 }
 
+/** A token count as `950`, `1.8k` or `42k`. */
 export function formatTokens(n: number): string {
   if (n < 1000) return String(n)
   if (n < 10000) return (n / 1000).toFixed(1) + 'k'
   return Math.round(n / 1000) + 'k'
 }
 
+/** Growth in points of the window, always signed, one decimal under 10: `+0.6%`, `-12%`; never `-0.0%`. */
 export function formatGrowth(points: number): string {
   const abs = Math.abs(points)
   const body = abs < 10 ? abs.toFixed(1) : String(Math.round(abs))
   return (points < 0 && body !== '0.0' ? '-' : '+') + body + '%'
 }
 
-
-/** Meta row, fitted to `max` cells: drop the tool count, the trail, the token count, then the whole row. */
+/**
+ * Meta row, fitted to `max` cells: drop the tool count, the trail, the token count, then the whole row.
+ * @param growth - this turn's growth in points of the window, or null when unmeasured
+ * @param history - earlier turns' growth in points, oldest first
+ */
 export function metaRow(meta: Meta, growth: number | null, history: number[], max: number): Seg[] {
   const head = `◆ ${formatSecs(meta.thinkMs)} · ${meta.blocks} blk`
   const tools = ` · ${meta.tools} ${meta.tools === 1 ? 'tool' : 'tools'}`

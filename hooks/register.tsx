@@ -5,17 +5,26 @@ import type { Ctx, Phase, TurnMeta } from '../types'
 import { enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, topTerms } from './lib'
 import type { Seg } from './lib'
 
+/** How often the ticker advances a running turn, in milliseconds. */
 export const TICK_MS = 1000
+/** The widest the band draws, in terminal cells. */
 export const MAX_WIDTH = 84
+/** The share of the body's columns the band may take. */
 export const WIDTH_SHARE = 0.6
+/** Under this many cells the band draws nothing. */
 export const MIN_WIDTH = 12
+/** The most names the focus row shows. */
 export const FOCUS_TERMS = 3
 /** Cells the engine's `[-]` collapse mark covers at the band's top-right corner, plus a gap. */
 export const CORNER = 4
 
+/** The session's context size, kept current by measures and each step's usage. */
 export const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
+/** The current main-loop turn, or the last one until the next starts. */
 export const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
+/** Recent main-loop turns' growth, in points of the window, oldest first. */
 export const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as number[])
+/** Turns of growth the trail keeps. */
 export const TRAIL_MAX = 20
 
 /** Context growth since the turn's step 0, in percentage points of the window. */
@@ -54,6 +63,7 @@ function startTicker($: EngineInterface) {
 
 /** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
 type Ink = { color?: string; dimColor?: boolean }
+/** Timeline palettes, keyed by the `palette` setting; unknown values fall back to `mono`. */
 export const PALETTES: Record<string, { think: Ink; tool: Ink }> = {
   mono: { think: {}, tool: { dimColor: true } },
   amber: { think: { color: 'yellow' }, tool: { dimColor: true } },
@@ -61,6 +71,7 @@ export const PALETTES: Record<string, { think: Ink; tool: Ink }> = {
   magenta: { think: { color: 'magenta' }, tool: { color: 'cyan' } },
 }
 
+/** Registers the mod's hooks; `options.palette` picks the timeline palette. */
 export const register: Register = (on, options) => {
   const palette = PALETTES[String(options.palette)] ?? PALETTES.mono
 
