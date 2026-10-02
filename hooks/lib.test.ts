@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
-import { addTerms, enterPhase, focusRow, formatSecs, newTurn, phaseOfMode, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, topTerms } from './lib'
+import { addTerms, enterPhase, focusRow, formatSecs, newTurn, phaseOfMode, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, toolTerms, topTerms } from './lib'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -30,6 +30,28 @@ describe('scanThought', () => {
 
   test('terms shorter than 3 or longer than 40 characters are skipped', () => {
     expect(scanThought('', '`ab` `' + 'a'.repeat(41) + '` `fine` ').terms).toEqual(['fine'])
+  })
+})
+
+describe('toolTerms', () => {
+  test('a file a tool reads or edits counts by its name', () => {
+    expect(toolTerms({ file_path: '/repo/hooks/register.tsx', limit: 15 })).toEqual(['register.tsx'])
+    expect(toolTerms({ notebook_path: 'nb/analysis.ipynb' })).toEqual(['analysis.ipynb'])
+  })
+
+  test('a search counts its code names, not its plain words', () => {
+    expect(toolTerms({ pattern: 'braille|growthTrail', path: '/repo' })).toEqual(['growthTrail'])
+  })
+
+  test('a command counts only the file names in it, not directories or flags', () => {
+    expect(toolTerms({ command: 'cd /Users/me/code/repo && cat hooks/lib.ts README.md | grep -n x_y' })).toEqual(['lib.ts', 'README.md'])
+  })
+
+  test('other arguments and non-object input count nothing', () => {
+    expect(toolTerms({ description: 'Read `metaRow` in lib.ts', prompt: 'look at register.tsx' })).toEqual([])
+    expect(toolTerms(null)).toEqual([])
+    expect(toolTerms('lib.ts')).toEqual([])
+    expect(toolTerms({ file_path: 42 })).toEqual([])
   })
 })
 

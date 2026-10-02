@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Ctx, Phase, TurnMeta } from '../types'
-import { enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, topTerms } from './lib'
+import { addTerms, enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, toolTerms, topTerms } from './lib'
 import type { Seg } from './lib'
 
 /** How often the ticker advances a running turn, in milliseconds. */
@@ -143,7 +143,12 @@ export const register: Register = (on, options) => {
     const stream = next(e)
     while (true) {
       const step = await stream.next()
-      if (step.done) return step.value
+      if (step.done) {
+        // The step's tool calls name what the turn touches, even when no thinking text streams.
+        const terms = step.value.toolUses.flatMap(u => toolTerms(u.input))
+        if (terms.length > 0) await safely(() => update($, turn, t => t && { ...t, focus: addTerms(t.focus, terms) }))
+        return step.value
+      }
       const chunk = step.value
       await safely(async () => {
         const now = await $.clock.now()

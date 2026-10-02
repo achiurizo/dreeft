@@ -54,6 +54,40 @@ export function scanThought(carry: string, piece: string): { terms: string[]; he
   return { terms, hedges: (ready.match(HEDGE) ?? []).length, carry: rest.length > CARRY_MAX ? '' : rest }
 }
 
+/** Arguments that name the file a tool reads or writes. */
+const FILE_ARGS = ['file_path', 'notebook_path']
+/** Arguments that hold a search, scanned for code names the way thinking text is. */
+const SEARCH_ARGS = ['pattern', 'query']
+
+/**
+ * The names a tool call touches, from its arguments: the file it names, code names in its search,
+ * and file names in its shell command. Directories and every other argument count nothing, so a
+ * repo path repeated in each command cannot crowd out the files.
+ */
+export function toolTerms(input: unknown): string[] {
+  if (typeof input !== 'object' || input === null) return []
+  const args = new Map(Object.entries(input))
+  const text = (key: string) => {
+    const v = args.get(key)
+    return typeof v === 'string' ? v : null
+  }
+  const terms: string[] = []
+  for (const key of FILE_ARGS) {
+    const path = text(key)
+    const term = path === null ? null : normTerm(path)
+    if (term !== null) terms.push(term)
+  }
+  for (const key of SEARCH_ARGS) {
+    const search = text(key)
+    if (search !== null) terms.push(...scanThought('', `${search} `).terms)
+  }
+  for (const m of (text('command') ?? '').matchAll(TOKEN)) {
+    const term = FILE.test(m[0]) ? normTerm(m[0]) : null
+    if (term !== null) terms.push(term)
+  }
+  return terms
+}
+
 /** Count each term; a seen term moves to the end, so recency breaks ties. */
 export function addTerms(focus: Term[], terms: string[]): Term[] {
   let out = focus

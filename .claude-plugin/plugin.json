@@ -1,6 +1,6 @@
 {
   "name": "whispered-thoughts",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
   "author": {
     "name": "Arthur Chiu",
