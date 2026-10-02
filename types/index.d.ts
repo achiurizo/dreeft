@@ -24,6 +24,8 @@ export type TurnMeta = {
   hedges: number
   /** Thinking text not yet scanned: a partial word or an open backtick. */
   carry: string
+  /** The kind of the last chunk this step, to tell a new thinking block from more of one. */
+  lastChunk: 'thinking' | 'text' | 'tool' | 'stop' | null
 }
 
 declare module 'claude-code' {

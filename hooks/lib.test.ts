@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
-import { addTerms, focusRow, formatSecs, newTurn, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, topTerms } from './lib'
+import { addTerms, enterPhase, focusRow, formatSecs, newTurn, phaseOfMode, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, topTerms } from './lib'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -67,10 +67,21 @@ describe('phases', () => {
     expect(phaseTotals(spans, 11_000)).toEqual({ wait: 1000, think: 3000, tool: 5000, write: 2000 })
   })
 
-  test('timelineCells: one cell per second, sampled mid-cell', () => {
+  test('timelineCells: one cell per second', () => {
     expect(timelineCells(spans, 0, 11_000, 40).join(',')).toBe(
       'wait,think,think,think,tool,tool,tool,tool,tool,write,write',
     )
+  })
+
+  test('timelineCells: a short burst still marks its cell; think outranks tool, write and wait', () => {
+    const burst = [
+      { phase: 'wait' as const, at: 0 },
+      { phase: 'think' as const, at: 1200 },
+      { phase: 'wait' as const, at: 1500 },
+      { phase: 'tool' as const, at: 2100 },
+      { phase: 'write' as const, at: 2300 },
+    ]
+    expect(timelineCells(burst, 0, 3000, 40).join(',')).toBe('wait,think,tool')
   })
 
   test('timelineCells: a long turn compresses to fit, whole seconds per cell', () => {
@@ -129,6 +140,14 @@ describe('rows', () => {
   test('timelineRow: zero-time phases are left out of the totals', () => {
     expect(text(timelineRow([{ phase: 'think', at: 0 }], 0, 1000, 80))).toBe('▒  think 1s')
   })
+
+  test('timelineRow: a phase under half a second reads <1s instead of vanishing', () => {
+    const spans = [
+      { phase: 'tool' as const, at: 0 },
+      { phase: 'write' as const, at: 2000 },
+    ]
+    expect(text(timelineRow(spans, 0, 2300, 80))).toBe('░░█  tools 2s · write <1s')
+  })
 })
 
 describe('reduceChunk', () => {
@@ -143,6 +162,12 @@ describe('reduceChunk', () => {
     ])
     expect(t.blocks).toBe(1)
     expect(t.now).toBe(2000)
+  })
+
+  test('a think span opened earlier (by the spinner) does not stop the first chunk counting a block', () => {
+    let t = enterPhase(t0, 'think', 50)
+    t = reduceChunk(t, { kind: 'thinking', index: 0, text: 'a ' }, 100)
+    expect(t.blocks).toBe(1)
   })
 
   test('a tool chunk opens a tool span and counts the tool', () => {
@@ -186,5 +211,11 @@ describe('reduceChunk', () => {
       100,
     )
     expect(t.outTok).toBe(40)
+  })
+})
+
+describe('phaseOfMode', () => {
+  test('maps every spinner mode to a phase', () => {
+    expect((['requesting', 'thinking', 'responding', 'tool-input', 'tool-use'] as const).map(m => phaseOfMode(m))).toEqual(['wait', 'think', 'write', 'tool', 'tool'])
   })
 })
