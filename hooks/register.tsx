@@ -116,6 +116,16 @@ export const register: Register = on => {
     }
 
     if (e.index === 0) {
+      // Nothing measured since load: seed from the status line's figures, apart so a failure here
+      // cannot cost the turn reset below.
+      await safely(async () => {
+        if (await read($, ctx)) return
+        const { context } = await $.session.usage()
+        if (context.tokens !== undefined && context.window > 0) {
+          const seeded = { tokens: context.tokens, window: context.window, lastInput: null }
+          await update($, ctx, () => seeded)
+        }
+      })
       await safely(async () => {
         const c = await read($, ctx)
         await update($, line, () => EMPTY)

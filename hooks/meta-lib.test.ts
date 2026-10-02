@@ -33,8 +33,14 @@ describe('formatters', () => {
 })
 
 describe('growthTrail', () => {
-  test('negative growth draws as 0', () => {
-    expect(growthTrail([], -38, 1)).toEqual({ past: '', now: '⠀' })
+  test('negative growth draws as a zero turn: one dot, never blank', () => {
+    expect(growthTrail([], -38, 1)).toEqual({ past: '', now: '\u2880' })
+  })
+  test('small growth values still draw: scale to the largest value shown', () => {
+    expect(growthTrail([0.2, 0.4], 0.3, 2)).toEqual({ past: '\u28a0', now: '\u28f7' })
+  })
+  test('a real zero-growth turn shows one dot; padding stays blank', () => {
+    expect(growthTrail([0], 0, 2)).toEqual({ past: '\u2800', now: '\u28c0' })
   })
   test('scales to the largest value; newest cell holds previous and current', () => {
     const t = growthTrail([2, 4], 4, 2)

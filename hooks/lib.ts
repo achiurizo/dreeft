@@ -57,13 +57,21 @@ export function braille(values: number[]): string {
   return out
 }
 
-/** Per-turn growth as braille: `past` holds earlier turns, `now` the newest cell. Negatives draw as 0. */
+/**
+ * Per-turn growth as braille: `past` holds earlier turns, `now` the newest cell. Scales to the
+ * largest value shown; every real turn gets at least one dot (negatives count as 0), padding none.
+ */
 export function growthTrail(history: number[], current: number | null, cells: number): { past: string; now: string } {
-  const values = [...history, current ?? 0].map(v => Math.max(0, v)).slice(-cells * 2)
-  while (values.length < cells * 2) values.unshift(0)
-  const max = Math.max(1, ...values)
-  const scaled = values.map(v => (v / max) * 100)
-  return { past: braille(scaled.slice(0, -2)), now: braille(scaled.slice(-2)) }
+  const real = [...history, current ?? 0].map(v => Math.max(0, v)).slice(-cells * 2)
+  const max = Math.max(...real) || 1
+  const levels = real.map(v => Math.max(1, Math.round((v / max) * 4)))
+  while (levels.length < cells * 2) levels.unshift(0)
+  const draw = (ls: number[]) => {
+    let out = ''
+    for (let k = 0; k < ls.length; k += 2) out += String.fromCharCode(0x2800 + (LEFT[ls[k] ?? 0] ?? 0) + (RIGHT[ls[k + 1] ?? 0] ?? 0))
+    return out
+  }
+  return { past: draw(levels.slice(0, -2)), now: draw(levels.slice(-2)) }
 }
 
 export function formatTokens(n: number): string {
