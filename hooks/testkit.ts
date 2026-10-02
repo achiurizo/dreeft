@@ -26,7 +26,7 @@ export const PROBE: Plugin = {
   },
 }
 
-type Probed = { turn: TurnMeta | null; trail: number[] | null; ctx: Ctx | null }
+type Probed = { turn: TurnMeta | null; trail: (number | null)[] | null; ctx: Ctx | null }
 
 export async function probe<K extends keyof Probed = 'turn'>($: Engine, key?: K): Promise<Probed[K]> {
   const { text } = await $.command.run({

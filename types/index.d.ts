@@ -49,6 +49,6 @@ export type TurnMeta = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'whispered-thoughts': { ctx: Ctx | null; turn: TurnMeta | null; trail: number[] }
+    'whispered-thoughts': { ctx: Ctx | null; turn: TurnMeta | null; trail: (number | null)[] }
   }
 }

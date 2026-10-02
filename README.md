@@ -52,7 +52,7 @@ Phases come from two sources: the model's chunks, and the mode of Claude Code's 
 | `3 tools` | Tool calls this turn |
 | `1.8k out` | Output tokens this turn (thinking included) |
 | `+0.6%` | How much this turn grew the context, in points of the window. Amber at 10 points or more. Negative after a compaction. |
-| `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest |
+| `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest. An amber `↓` marks a compaction, including a `/compact` between turns. |
 
 When the terminal is narrow, the meta row drops parts in this order: the tool count, the trail, the token count. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. Under 12 cells it draws nothing.
 
