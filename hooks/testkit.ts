@@ -1,0 +1,70 @@
+import type { On, TurnCompleteInput, TurnStepChunk, TurnStepInput, TurnStepResult } from 'claude-code'
+import type { Engine, Plugin } from 'claude-code/testing'
+
+import type { Ctx, ThinkingTail, TurnMeta } from '../types'
+
+export const STEP: TurnStepInput = { turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 }
+
+/** Reads the mod's state for a test: the test `$` has no state noun. */
+export const PROBE: Plugin = {
+  name: 'probe',
+  register: on => {
+    on('command.run', async ($, e, next) => {
+      if (e.command !== 'probe') return next(e)
+      const read = async () => {
+        switch (e.args) {
+          case 'turn':
+            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'turn' } as const)).value
+          case 'trail':
+            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'trail' } as const)).value
+          case 'ctx':
+            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'ctx' } as const)).value
+          default:
+            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'line' } as const)).value
+        }
+      }
+      return { text: JSON.stringify((await read()) ?? null) }
+    })
+  },
+}
+
+type Probed = { line: ThinkingTail | null; turn: TurnMeta | null; trail: number[] | null; ctx: Ctx | null }
+
+export async function probe<K extends keyof Probed = 'line'>($: Engine, key?: K): Promise<Probed[K]> {
+  const { text } = await $.command.run({
+    command: 'probe',
+    args: key ?? 'line',
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 120 },
+  })
+  return JSON.parse(text ?? 'null')
+}
+
+/** Stands for the model beneath the mod: yields each step's chunks in turn. */
+export function beneath(on: On, ...steps: TurnStepChunk[][]) {
+  const queue = [...steps]
+  on('turn.step', async function* (_$, e): AsyncGenerator<TurnStepChunk, TurnStepResult> {
+    for (const chunk of queue.shift() ?? []) yield chunk
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+  })
+}
+
+/** Engine-side answers for the events the mod observes and passes on. */
+export function answerBelow(on: On) {
+  on('session.measure', async (_$, e) => ({ changed: e.changed }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+}
+
+export function measure($: Engine, tokens: number, window: number) {
+  return $.session.measure({ context: { tokens, window }, rateLimits: [], changed: ['context'] })
+}
+
+export function complete($: Engine, extra: Partial<TurnCompleteInput>) {
+  return $.turn.complete({ turnId: 't1', answer: '', durationMs: 1, isAborted: false, reason: 'answer', ...extra } as TurnCompleteInput)
+}
+
+export async function drain(stream: AsyncIterable<unknown>) {
+  for await (const _ of stream) {
+    // read to the end
+  }
+}
