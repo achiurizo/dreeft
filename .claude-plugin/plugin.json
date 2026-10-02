@@ -1,14 +1,6 @@
 {
   "name": "whispered-thoughts",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Dim shimmering line above the prompt showing the live tail of the session's thinking",
-  "types": "./types/index.d.ts",
-  "userConfig": {
-    "hideThinkingInTranscript": {
-      "type": "boolean",
-      "title": "Hide thinking in the transcript",
-      "description": "Experimental. Show the main session's live thinking only in the band, not in the transcript. Off passes every chunk through unchanged.",
-      "default": false
-    }
-  }
+  "types": "./types/index.d.ts"
 }

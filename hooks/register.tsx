@@ -34,9 +34,7 @@ async function safely(fn: () => Promise<unknown>) {
   }
 }
 
-export const register: Register = (on, options) => {
-  const hideThinking = options.hideThinkingInTranscript === true
-
+export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     // A reload drops the module's timer; never leave the line claiming to be live.
     await update($, line, s => ({ ...s, live: false }))
@@ -152,8 +150,6 @@ export const register: Register = (on, options) => {
         const step = await stream.next()
         if (step.done) return step.value
         await observe(step.value)
-        // Opt-in: the band keeps the thinking, the transcript's live view does not get it.
-        if (hideThinking && step.value.kind === 'thinking') continue
         yield step.value
       }
     } finally {
