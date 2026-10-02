@@ -66,17 +66,30 @@ test('while thinking: focus row, timeline row, meta row', async ($, on) => {
   await step.end()
 })
 
-test('thinking cells are magenta, and the timeline grows with the clock', async ($, on) => {
-  engineBand(on)
+test('mono by default: thinking cells plain, and the timeline grows with the clock', async ($, on) => {
   const clock = mock.clock(on)
+  engineBand(on)
   const step = await thinking($, on, 'weighing ')
   const view = await mount($)
   await clock.advance(4000)
-  const think = (await runs(view)).find(r => r.text.startsWith('▒'))
-  expect(think?.props.color).toBe('magenta')
+  const think = (await runs(view)).find(r => r.text.startsWith('▀'))
+  expect(think?.props.color).toBeUndefined()
+  expect(think?.props.dimColor).not.toBe(true)
   expect(Array.from(think?.text ?? '').length).toBeGreaterThanOrEqual(4)
   expect(await joined(view)).toContain('think 4s')
   await step.end()
+})
+
+test('palette amber: thinking in yellow, tools dim', { options: { palette: 'amber' } }, async ($, on) => {
+  const clock = mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'weighing ', [{ kind: 'tool', index: 1, id: 'x', name: 'Bash' }])
+  await clock.advance(2000)
+  await step.end()
+  await clock.advance(2000)
+  const all = await runs(await mount($))
+  expect(all.find(r => r.text.startsWith('▀'))?.props.color).toBe('yellow')
+  expect(all.find(r => r.text.startsWith('▄'))?.props.dimColor).toBe(true)
 })
 
 test('idle after a turn: the rows stay, with that turn\'s growth', async ($, on) => {
@@ -91,7 +104,7 @@ test('idle after a turn: the rows stay, with that turn\'s growth', async ($, on)
   const view = await mount($, { isWorking: false })
   const text = await joined(view)
   expect(text).toContain('metaRow')
-  expect(text).toContain('▒')
+  expect(text).toContain('▀')
   expect(await view.find({ text: '+0.6%' })).toBeDefined()
 })
 

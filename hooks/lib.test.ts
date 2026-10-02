@@ -117,6 +117,15 @@ describe('rows', () => {
     expect(text(focusRow([], 0, 80))).toBe('∴ …')
   })
 
+  test('timelineRow: waiting is blank, and the end cap shows where the strip stops', () => {
+    const spans = [
+      { phase: 'wait' as const, at: 0 },
+      { phase: 'think' as const, at: 1000 },
+      { phase: 'wait' as const, at: 2000 },
+    ]
+    expect(text(timelineRow(spans, 0, 3000, 80))).toBe(' ▀ ▕  think 1s')
+  })
+
   test('timelineRow: a glyph per cell, then totals per phase', () => {
     const spans = [
       { phase: 'think' as const, at: 0 },
@@ -124,9 +133,9 @@ describe('rows', () => {
       { phase: 'write' as const, at: 3000 },
     ]
     const row = timelineRow(spans, 0, 4000, 80)
-    expect(text(row)).toBe('▒▒░█  think 2s · tools 1s · write 1s')
-    expect(row.find(s => s.text === '▒▒')?.tone).toBe('think')
-    expect(row.find(s => s.text === '░')?.tone).toBe('tool')
+    expect(text(row)).toBe('▀▀▄█▕  think 2s · tools 1s · write 1s')
+    expect(row.find(s => s.text === '▀▀')?.tone).toBe('think')
+    expect(row.find(s => s.text === '▄')?.tone).toBe('tool')
   })
 
   test('timelineRow: drops the totals when they would leave under 8 cells', () => {
@@ -134,11 +143,11 @@ describe('rows', () => {
       { phase: 'think' as const, at: 0 },
       { phase: 'tool' as const, at: 1000 },
     ]
-    expect(text(timelineRow(spans, 0, 2000, 20))).toBe('▒░')
+    expect(text(timelineRow(spans, 0, 2000, 20))).toBe('▀▄▕')
   })
 
   test('timelineRow: zero-time phases are left out of the totals', () => {
-    expect(text(timelineRow([{ phase: 'think', at: 0 }], 0, 1000, 80))).toBe('▒  think 1s')
+    expect(text(timelineRow([{ phase: 'think', at: 0 }], 0, 1000, 80))).toBe('▀▕  think 1s')
   })
 
   test('timelineRow: a phase under half a second reads <1s instead of vanishing', () => {
@@ -146,7 +155,7 @@ describe('rows', () => {
       { phase: 'tool' as const, at: 0 },
       { phase: 'write' as const, at: 2000 },
     ]
-    expect(text(timelineRow(spans, 0, 2300, 80))).toBe('░░█  tools 2s · write <1s')
+    expect(text(timelineRow(spans, 0, 2300, 80))).toBe('▄▄█▕  tools 2s · write <1s')
   })
 })
 

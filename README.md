@@ -6,7 +6,7 @@ The transcript already shows the thinking itself. The band shows the data around
 
 ```text
                          ∴ register.tsx ×6 · metaRow ×4 · observe ×2   ⟲ 2
-                  ·▒▒▒▒▒░░░░░░░░░▒▒▒▒▒▒░░░░█████  think 11s · tools 13s · write 5s
+                   ▀▀▀▀▀▄▄▄▄▄▄▄▄▄ ▀▀▀▀▀▀▄▄▄▄ █████▕  think 11s · tools 13s · write 5s
              ◆ 11s · 2 blk · 3 tools · 1.8k out   +0.6% ⠀⢀⣀⣠⣤⣴⣀⣠⣤⣶
 ```
 
@@ -24,12 +24,16 @@ The band appears when a turn starts and stays up after it ends, until the next t
 
 One cell per second of the turn, so the strip grows while the turn runs, tool runs included. A long turn packs several seconds into each cell so the whole turn fits. When several phases touch one cell, it shows the most notable: thinking, then tool, then writing, then waiting.
 
+Each cell is two lanes, thinking on top and tools below:
+
 | Cell | Phase |
 | --- | --- |
-| `·` | Waiting on the model |
-| `▒` | Thinking |
-| `░` | Calling or running a tool |
+| `▀` | Thinking |
+| `▄` | Calling or running a tool |
 | `█` | Writing the answer |
+| blank | Waiting on the model |
+
+A dim `▕` closes the strip, so trailing waiting time still reads as time.
 
 After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`. A phase under half a second reads `<1s`.
 
@@ -81,6 +85,22 @@ For every session, add it to the `env` block of `~/.claude/settings.json`:
 ```
 
 If hot reloading is enabled in a session, edits to `hooks/` take effect without a restart.
+
+## Settings
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `palette` | `mono` | Timeline colors. `mono` uses brightness only (thinking plain, tools dim). `amber` and `blue` color thinking and keep tools dim. `magenta` colors thinking magenta and tools cyan. |
+
+Change it with `/config`, or in `~/.claude/settings.json`:
+
+```json
+{
+  "pluginConfigs": {
+    "whispered-thoughts": { "options": { "palette": "amber" } }
+  }
+}
+```
 
 ## How it works
 

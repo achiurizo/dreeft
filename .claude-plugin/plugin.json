@@ -1,6 +1,20 @@
 {
   "name": "whispered-thoughts",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "palette": {
+      "type": "string",
+      "title": "Timeline colors",
+      "description": "How thinking and tool cells are colored. mono uses brightness only; amber, blue and magenta color thinking (magenta also colors tools cyan).",
+      "default": "mono",
+      "options": [
+        "mono",
+        "amber",
+        "blue",
+        "magenta"
+      ]
+    }
+  }
 }

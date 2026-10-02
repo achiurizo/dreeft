@@ -176,7 +176,10 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
 
 // Rows.
 
-const GLYPH: Record<Phase, string> = { wait: '·', think: '▒', tool: '░', write: '█' }
+/** Half-block lanes: thinking on top, tools below, writing fills both, waiting leaves the cell blank. */
+const GLYPH: Record<Phase, string> = { wait: ' ', think: '▀', tool: '▄', write: '█' }
+/** Closes the strip, so trailing blank (waiting) cells still read as time. */
+const CAP = '▕'
 const TONE: Record<Phase, Tone> = { wait: 'faint', think: 'think', tool: 'tool', write: 'bright' }
 const TOTALS: [Phase, string][] = [
   ['think', 'think'],
@@ -185,7 +188,7 @@ const TOTALS: [Phase, string][] = [
 ]
 const MIN_STRIP = 8
 
-/** The turn as a strip of phase cells, then time per phase; the totals drop when they leave under 8 cells. */
+/** The turn as a strip of phase cells and its cap, then time per phase; the totals drop when they leave under 8 cells. */
 export function timelineRow(spans: Span[], start: number, end: number, max: number): Seg[] {
   const sums = phaseTotals(spans, end)
   const totals: Seg[] = []
@@ -195,14 +198,16 @@ export function timelineRow(spans: Span[], start: number, end: number, max: numb
     totals.push({ text: totals.length === 0 ? '  ' : ' · ', tone: 'dim' }, { text: `${label} ${time}`, tone: TONE[phase] })
   }
   const room = max - width(totals)
-  const cells = timelineCells(spans, start, end, room >= MIN_STRIP ? room : max)
+  const fits = room >= MIN_STRIP
+  const cells = timelineCells(spans, start, end, (fits ? room : max) - CAP.length)
   const strip: Seg[] = []
   for (const c of cells) {
     const last = strip.at(-1)
     if (last && last.tone === TONE[c]) last.text += GLYPH[c]
     else strip.push({ text: GLYPH[c], tone: TONE[c] })
   }
-  return room >= MIN_STRIP ? [...strip, ...totals] : strip
+  strip.push({ text: CAP, tone: 'dim' })
+  return fits ? [...strip, ...totals] : strip
 }
 
 /** `∴` then the top terms with counts, then second-guesses; terms drop from the end to fit. */
