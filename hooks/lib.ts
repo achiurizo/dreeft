@@ -65,7 +65,7 @@ export function addTerms(focus: Term[], terms: string[]): Term[] {
 }
 
 /** A name has to come back at least this often to count as focus. */
-export const FOCUS_MIN = 2
+const FOCUS_MIN = 2
 
 /** The `k` most-mentioned terms with at least `FOCUS_MIN` mentions; ties go to the most recent. */
 export function topTerms(focus: Term[], k: number): Term[] {
@@ -255,18 +255,20 @@ export function focusRow(top: Term[], hedges: number, max: number): Seg[] {
 }
 
 /** Braille cells in the meta row's growth trail, two turns per cell. */
-export const TRAIL_CELLS = 10
+const TRAIL_CELLS = 10
 const LEFT = [0, 0x40, 0x44, 0x46, 0x47]
 const RIGHT = [0, 0x80, 0xa0, 0xb0, 0xb8]
 
+/** Two levels per braille cell, each 0-4 dots rising from the bottom; an odd last level gets an empty right column. */
+function dots(levels: number[]): string {
+  let out = ''
+  for (let i = 0; i < levels.length; i += 2) out += String.fromCharCode(0x2800 + (LEFT[levels[i] ?? 0] ?? 0) + (RIGHT[levels[i + 1] ?? 0] ?? 0))
+  return out
+}
+
 /** Two values per braille cell, each 0..100 drawn as 0-4 dots rising from the bottom. */
 export function braille(values: number[]): string {
-  const level = (v: number) => Math.max(0, Math.min(4, Math.round((v / 100) * 4)))
-  let out = ''
-  for (let i = 0; i < values.length; i += 2) {
-    out += String.fromCharCode(0x2800 + (LEFT[level(values[i] ?? 0)] ?? 0) + (RIGHT[level(values[i + 1] ?? 0)] ?? 0))
-  }
-  return out
+  return dots(values.map(v => Math.max(0, Math.min(4, Math.round((v / 100) * 4)))))
 }
 
 /**
@@ -281,12 +283,7 @@ export function growthTrail(history: number[], current: number | null, cells: nu
   const max = Math.max(...real) || 1
   const levels = real.map(v => Math.max(1, Math.round((v / max) * 4)))
   while (levels.length < cells * 2) levels.unshift(0)
-  const draw = (ls: number[]) => {
-    let out = ''
-    for (let k = 0; k < ls.length; k += 2) out += String.fromCharCode(0x2800 + (LEFT[ls[k] ?? 0] ?? 0) + (RIGHT[ls[k + 1] ?? 0] ?? 0))
-    return out
-  }
-  return { past: draw(levels.slice(0, -2)), now: draw(levels.slice(-2)) }
+  return { past: dots(levels.slice(0, -2)), now: dots(levels.slice(-2)) }
 }
 
 /** A token count as `950`, `1.8k` or `42k`. */

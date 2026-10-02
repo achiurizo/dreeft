@@ -6,29 +6,29 @@ import { enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduc
 import type { Seg } from './lib'
 
 /** How often the ticker advances a running turn, in milliseconds. */
-export const TICK_MS = 1000
+const TICK_MS = 1000
 /** The widest the band draws, in terminal cells. */
-export const MAX_WIDTH = 84
+const MAX_WIDTH = 84
 /** The share of the body's columns the band may take. */
-export const WIDTH_SHARE = 0.6
+const WIDTH_SHARE = 0.6
 /** Under this many cells the band draws nothing. */
-export const MIN_WIDTH = 12
+const MIN_WIDTH = 12
 /** The most names the focus row shows. */
-export const FOCUS_TERMS = 3
+const FOCUS_TERMS = 3
 /** Cells the engine's `[-]` collapse mark covers at the band's top-right corner, plus a gap. */
-export const CORNER = 4
+const CORNER = 4
 
 /** The session's context size, kept current by measures and each step's usage. */
-export const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
+const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
 /** The current main-loop turn, or the last one until the next starts. */
-export const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
+const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
 /** Recent main-loop turns' growth, in points of the window, oldest first. */
-export const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as number[])
+const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as number[])
 /** Turns of growth the trail keeps. */
-export const TRAIL_MAX = 20
+const TRAIL_MAX = 20
 
 /** Context growth since the turn's step 0, in percentage points of the window. */
-export function growthOf(t: TurnMeta | null, c: Ctx | null): number | null {
+function growthOf(t: TurnMeta | null, c: Ctx | null): number | null {
   if (!t || !c || t.startTokens === null || t.window <= 0) return null
   return Math.round(((c.tokens - t.startTokens) / t.window) * 10000) / 100
 }
@@ -64,16 +64,17 @@ function startTicker($: EngineInterface) {
 /** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
 type Ink = { color?: string; dimColor?: boolean }
 /** Timeline palettes, keyed by the `palette` setting; unknown values fall back to `mono`. */
-export const PALETTES: Record<string, { think: Ink; tool: Ink }> = {
+const PALETTES = {
   mono: { think: {}, tool: { dimColor: true } },
   amber: { think: { color: 'yellow' }, tool: { dimColor: true } },
   blue: { think: { color: 'blue' }, tool: { dimColor: true } },
   magenta: { think: { color: 'magenta' }, tool: { color: 'cyan' } },
-}
+} satisfies Record<string, { think: Ink; tool: Ink }>
+const isPalette = (name: unknown): name is keyof typeof PALETTES => typeof name === 'string' && Object.hasOwn(PALETTES, name)
 
 /** Registers the mod's hooks; `options.palette` picks the timeline palette. */
 export const register: Register = (on, options) => {
-  const palette = PALETTES[String(options.palette)] ?? PALETTES.mono
+  const palette: { think: Ink; tool: Ink } = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
 
   on('session.start', async ($, e, next) => {
     // A reload drops the module's ticker; pick it back up if a turn is still running.
@@ -202,9 +203,9 @@ export const register: Register = (on, options) => {
       ) : part.tone === 'warn' ? (
         <Text color="yellow">{part.text}</Text>
       ) : part.tone === 'think' ? (
-        <Text {...palette?.think}>{part.text}</Text>
+        <Text {...palette.think}>{part.text}</Text>
       ) : part.tone === 'tool' ? (
-        <Text {...palette?.tool}>{part.text}</Text>
+        <Text {...palette.tool}>{part.text}</Text>
       ) : (
         <Text>{part.text}</Text>
       )
