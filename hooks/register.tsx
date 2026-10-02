@@ -1,20 +1,16 @@
 import { atom, read, update } from 'claude-code'
-import type { Register, Timer, TurnStepChunk } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Ctx, ThinkingTail, TurnMeta } from '../types'
-import { appendTail, metaRow, shimmerSegments, turnsLeft, wrapTail } from './lib'
+import type { Ctx, TurnMeta } from '../types'
+import { enterPhase, focusRow, metaRow, newTurn, phaseTotals, reduceChunk, timelineRow, topTerms } from './lib'
 import type { Seg } from './lib'
 
-export const TICK_MS = 80
-export const WINDOW = 4
+export const TICK_MS = 1000
 export const MAX_WIDTH = 84
 export const WIDTH_SHARE = 0.6
 export const MIN_WIDTH = 12
-export const THOUGHT_ROWS = 3
-export const BUFFER = 1200
+export const FOCUS_TERMS = 3
 
-export const EMPTY: ThinkingTail = { tail: '', live: false, phase: 0 }
-export const line = atom({ plugin: 'whispered-thoughts', key: 'line' } as const, EMPTY)
 export const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
 export const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
 export const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as number[])
@@ -34,10 +30,31 @@ async function safely(fn: () => Promise<unknown>) {
   }
 }
 
+// One ticker while a main-loop turn runs, so the timeline grows between steps too (tools run there).
+let ticker: Timer | undefined
+function stopTicker() {
+  ticker?.cancel()
+  ticker = undefined
+}
+function startTicker($: EngineInterface) {
+  stopTicker()
+  ticker = $.clock.every(TICK_MS, () => {
+    void (async () => {
+      const now = await $.clock.now()
+      const t = await read($, turn)
+      if (!t || t.done) return stopTicker()
+      await update($, turn, x => x && { ...x, now })
+    })().catch(() => {})
+  })
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    // A reload drops the module's timer; never leave the line claiming to be live.
-    await update($, line, s => ({ ...s, live: false }))
+    // A reload drops the module's ticker; pick it back up if a turn is still running.
+    await safely(async () => {
+      const t = await read($, turn)
+      if (t && !t.done) startTicker($)
+    })
     return next(e)
   })
 
@@ -54,12 +71,14 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
+      stopTicker()
       await safely(async () => {
         const t = await read($, turn)
         if (!t || t.done) return
+        const now = await $.clock.now()
         const g = growthOf(t, await read($, ctx))
         if (g !== null) await update($, trail, past => [...past, g].slice(-TRAIL_MAX))
-        await update($, turn, x => x && { ...x, done: true, final: g })
+        await update($, turn, x => x && { ...x, done: true, final: g, now })
       })
     }
     return next(e)
@@ -67,56 +86,6 @@ export const register: Register = on => {
 
   on('turn.step', async function* ($, e, next) {
     if (e.agentId !== undefined) return yield* next(e)
-
-    let clock: Timer | undefined
-    let blockStart: number | undefined
-    const freeze = async () => {
-      if (blockStart !== undefined) {
-        const started = blockStart
-        blockStart = undefined
-        await safely(async () => {
-          const ms = (await $.clock.now()) - started
-          await update($, turn, t => t && { ...t, thinkMs: t.thinkMs + ms })
-        })
-      }
-      if (clock === undefined) return
-      clock.cancel()
-      clock = undefined
-      await safely(() => update($, line, s => ({ ...s, live: false })))
-    }
-    // An abandoned dispatch need not close this generator, so `finally` alone can leak the timer.
-    next.signal.addEventListener('abort', () => void freeze(), { once: true })
-    const observe = async (chunk: TurnStepChunk) => {
-      if (chunk.kind === 'thinking') {
-        const fresh = clock === undefined
-        await safely(() =>
-          update($, line, s => ({
-            // A later block keeps the one before it, to scroll up and fade rather than vanish.
-            tail: appendTail(fresh && s.tail !== '' ? s.tail + ' ┊ ' : s.tail, chunk.text, BUFFER),
-            live: true,
-            phase: fresh ? 0 : s.phase,
-          })),
-        )
-        if (fresh) {
-          await safely(() => update($, turn, t => t && { ...t, blocks: t.blocks + 1 }))
-          await safely(async () => {
-            blockStart = await $.clock.now()
-          })
-        }
-        if (fresh && !next.signal.aborted) {
-          clock = $.clock.every(TICK_MS, () => {
-            void update($, line, s => ({ ...s, phase: s.phase + 1 })).catch(() => {})
-          })
-        }
-      } else if (chunk.kind === 'text' || chunk.kind === 'tool') {
-        await freeze()
-      } else if (chunk.kind === 'stop' && chunk.usage) {
-        const u = chunk.usage
-        const input = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
-        await safely(() => update($, turn, t => t && { ...t, outTok: t.outTok + u.output_tokens }))
-        await safely(() => update($, ctx, c => c && { ...c, tokens: input + u.output_tokens, lastInput: input }))
-      }
-    }
 
     if (e.index === 0) {
       // Nothing measured since load: seed from the status line's figures, apart so a failure here
@@ -131,66 +100,56 @@ export const register: Register = on => {
       })
       await safely(async () => {
         const c = await read($, ctx)
-        await update($, line, () => EMPTY)
-        await update($, turn, () => ({
-          thinkMs: 0,
-          blocks: 0,
-          outTok: 0,
-          startTokens: c?.tokens ?? null,
-          window: c?.window ?? 0,
-          done: false,
-          final: null,
-        }))
+        const now = await $.clock.now()
+        await update($, turn, () => newTurn(now, c?.tokens ?? null, c?.window ?? 0))
+        startTicker($)
+      })
+    } else {
+      // Between steps a tool ran; this step starts by waiting on the model again.
+      await safely(async () => {
+        const now = await $.clock.now()
+        await update($, turn, t => t && enterPhase(t, 'wait', now))
       })
     }
 
     const stream = next(e)
-    try {
-      while (true) {
-        const step = await stream.next()
-        if (step.done) return step.value
-        await observe(step.value)
-        yield step.value
-      }
-    } finally {
-      await freeze()
+    while (true) {
+      const step = await stream.next()
+      if (step.done) return step.value
+      const chunk = step.value
+      await safely(async () => {
+        const now = await $.clock.now()
+        await update($, turn, t => t && reduceChunk(t, chunk, now))
+        if (chunk.kind === 'stop' && chunk.usage) {
+          const u = chunk.usage
+          const input = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+          await update($, ctx, c => c && { ...c, tokens: input + u.output_tokens, lastInput: input })
+        }
+      })
+      yield chunk
     }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Read every value first so a write to any of them redraws this band.
-    const s = await read($, line)
     const t = await read($, turn)
     const turns = await read($, trail) // never `h`: that name is the JSX factory
     const c = await read($, ctx)
-    if (e.surface !== 'terminal' || e.props.hasSurvey) return next(e)
+    if (e.surface !== 'terminal' || e.props.hasSurvey || !t) return next(e)
 
     const width = Math.min(MAX_WIDTH, Math.floor(e.props.bodyColumns * WIDTH_SHARE))
     if (width < MIN_WIDTH) return next(e)
 
-    const rows: Seg[][] = []
-    if (e.props.isWorking && s.tail !== '') {
-      // Always the full count, padded on top, so the band never grows as words arrive; one row stays for the meta.
-      const count = Math.max(1, Math.min(THOUGHT_ROWS, e.props.maxRows - 1))
-      const lines = wrapTail(s.tail, width, count)
-      while (lines.length < count) lines.unshift('')
-      lines.forEach((text, i) => {
-        if (text === '') return rows.push([{ text: ' ', tone: 'dim' }])
-        if (i === lines.length - 1 && s.live) {
-          return rows.push(shimmerSegments(text, s.phase, WINDOW, width).map(run => ({ text: run.text, tone: run.dim ? 'dim' : 'bright' })))
-        }
-        rows.push([{ text, tone: i < lines.length - 2 ? 'faint' : 'dim' }])
-      })
-    }
-    if (t) {
-      const growth = t.done ? t.final : growthOf(t, c)
-      // Once done, the turn's own growth is already the trail's last entry.
-      const history = t.done && t.final !== null ? turns.slice(0, -1) : turns
-      const left = c ? turnsLeft(c.tokens, c.window, turns) : null
-      const meta = metaRow(t, growth, history, width, left)
-      if (meta.length > 0) rows.push(meta)
-    }
-    if (rows.length === 0) return next(e)
+    const totals = phaseTotals(t.spans, t.now)
+    const growth = t.done ? t.final : growthOf(t, c)
+    // Once done, the turn's own growth is already the trail's last entry.
+    const history = t.done && t.final !== null ? turns.slice(0, -1) : turns
+    const meta = metaRow({ thinkMs: totals.think, blocks: t.blocks, tools: t.tools, outTok: t.outTok }, growth, history, width)
+    const rows: Seg[][] = [
+      focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, width),
+      timelineRow(t.spans, t.started, t.now, width),
+      ...(meta.length > 0 ? [meta] : []),
+    ].slice(-Math.max(1, e.props.maxRows)) // a short band keeps the bottom rows
 
     const { Box, Text } = $.ui.resolve(e)
     const seg = (part: Seg) =>
@@ -202,6 +161,10 @@ export const register: Register = on => {
         <Text dimColor>{part.text}</Text>
       ) : part.tone === 'warn' ? (
         <Text color="yellow">{part.text}</Text>
+      ) : part.tone === 'think' ? (
+        <Text color="magenta">{part.text}</Text>
+      ) : part.tone === 'tool' ? (
+        <Text color="cyan">{part.text}</Text>
       ) : (
         <Text>{part.text}</Text>
       )

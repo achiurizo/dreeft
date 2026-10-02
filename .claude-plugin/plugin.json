@@ -1,6 +1,6 @@
 {
   "name": "whispered-thoughts",
-  "version": "0.4.1",
-  "description": "Dim shimmering line above the prompt showing the live tail of the session's thinking",
+  "version": "0.5.0",
+  "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
   "types": "./types/index.d.ts"
 }

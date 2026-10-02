@@ -1,39 +1,50 @@
 # whispered-thoughts
 
-A Claude Code mod that shows what the session is thinking, right above the prompt.
+A Claude Code mod that shows what the session's thinking is doing, right above the prompt.
 
-While the main session thinks, a small dim band above the prompt streams the
-tail of its thinking. A faint shimmer runs across the newest line. Under it, a
-meta row shows what the turn has cost so far:
+The transcript already shows the thinking itself. The band shows the data around it: what the thinking keeps coming back to, where the turn's time goes, and what the turn costs.
 
 ```text
-                     …the buffer also needs to grow from two hundred characters, or
-                   the older row will be empty. Next I'll check how maxRows limits
-                                       the band height in fullscreen mode before I
-                            ◆ 12s · 3 blk · 1.8k out   +0.6% ⠀⢀⣀⣠⣤⣴⣀⣠⣤⣶  ~14t left
+                         ∴ register.tsx ×6 · metaRow ×4 · observe ×2   ⟲ 2
+                  ·▒▒▒▒▒░░░░░░░░░▒▒▒▒▒▒░░░░█████  think 11s · tools 13s · write 5s
+             ◆ 11s · 2 blk · 3 tools · 1.8k out   +0.6% ⠀⢀⣀⣠⣤⣴⣀⣠⣤⣶
 ```
 
 ## What it shows
 
-**Thought rows** (top three rows, only while a turn is running)
+The band appears when a turn starts and stays up after it ends, until the next turn starts.
 
-- The latest thinking text, word-wrapped into three right-aligned rows. The oldest row is the faintest and the newest is brightest.
-- A bright 4-cell window sweeps across the band at a steady pace while thinking text is still arriving, lighting the newest row as it passes.
-- When the model starts writing or calls a tool, the rows freeze and stay dim. A later thinking block in the same turn continues after a `┊` separator, so the previous thought scrolls up and fades instead of vanishing. Each new turn starts empty.
-- The band always reserves all three rows, so the prompt doesn't jump as words arrive.
+**Focus row**
 
-**Meta row** (stays up after the turn ends, until the next turn starts)
+- The three names the thinking mentions most this turn, with counts. A name is a backticked span, a file name or path, or a camelCase or snake_case identifier. Plain words don't count.
+- `⟲ 2` counts second-guesses: how often the thinking says "wait", "actually" or "hmm". Shown in amber.
+- This is a word-count heuristic, not a summary, so it can pick the wrong names.
+
+**Timeline row**
+
+One cell per second of the turn, so the strip grows while the turn runs, tool runs included. A long turn packs several seconds into each cell so the whole turn fits.
+
+| Cell | Phase |
+| --- | --- |
+| `·` | Waiting on the model |
+| `▒` | Thinking |
+| `░` | Calling or running a tool |
+| `█` | Writing the answer |
+
+After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`.
+
+**Meta row**
 
 | Part | Meaning |
 | --- | --- |
-| `◆ 12s` | Time spent thinking this turn |
-| `3 blk` | Thinking blocks this turn |
+| `◆ 11s` | Time spent thinking this turn |
+| `2 blk` | Thinking blocks this turn |
+| `3 tools` | Tool calls this turn |
 | `1.8k out` | Output tokens this turn (thinking included) |
-| `+0.6%` | How much this turn grew the context, as a share of the window. Amber at 10 points or more. Negative after a compaction. |
+| `+0.6%` | How much this turn grew the context, in points of the window. Amber at 10 points or more. Negative after a compaction. |
 | `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest |
-| `~14t left` | Turns until the window is full, at the average growth of the last 5 turns that grew. Amber at 5 or fewer. |
 
-When the terminal is narrow, the meta row drops parts in this order: turns left, the trail, the token count. Under 12 cells the band draws nothing.
+When the terminal is narrow, the meta row drops parts in this order: the tool count, the trail, the token count. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. Under 12 cells it draws nothing.
 
 The mod only follows the main conversation. Subagent thinking and turns are ignored. It makes no model calls, network requests or file writes.
 
@@ -41,13 +52,13 @@ The mod only follows the main conversation. Subagent thinking and turns are igno
 
 - A Claude Code build with function-hook plugins (mods).
 - The terminal surface. Desktop, VS Code and mobile get nothing for now.
-- Thinking summaries turned on in `~/.claude/settings.json`:
+- Optional: thinking summaries turned on in `~/.claude/settings.json`:
 
   ```json
   { "showThinkingSummaries": true }
   ```
 
-  Without this setting the API sends no thinking text, so the thought rows never appear. The meta row still works.
+  The focus row reads the thinking text, so it stays at `∴ …` without this setting. The timeline and meta row work either way. With the setting on, the transcript also shows the thinking.
 
 ## Install
 
@@ -71,16 +82,16 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
 
 ## How it works
 
-- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. It records the thinking tail, thinking time, block count and output tokens.
+- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, block and tool counts, and output tokens.
+- A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.
 - A `ui.render` hook on the `AbovePrompt` band draws the rows from session state.
-- The shimmer timer runs only while thinking text is arriving.
 - If a state update fails, the mod drops the update and the turn continues.
 
 | Path | Contents |
 | --- | --- |
 | `hooks/register.tsx` | Hooks, state atoms, render |
-| `hooks/lib.ts` | Pure helpers: wrapping, shimmer, braille trail, formatting, turns-left |
+| `hooks/lib.ts` | Pure helpers: focus scan, phase timeline, chunk reducer, row layout, braille trail |
 | `types/index.d.ts` | Shape of the mod's session state |
 | `hooks/*.test.ts` | Tests, run with the `claude-code/testing` kit |
 

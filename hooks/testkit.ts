@@ -1,7 +1,7 @@
 import type { On, TurnCompleteInput, TurnStepChunk, TurnStepInput, TurnStepResult } from 'claude-code'
 import type { Engine, Plugin } from 'claude-code/testing'
 
-import type { Ctx, ThinkingTail, TurnMeta } from '../types'
+import type { Ctx, TurnMeta } from '../types'
 
 export const STEP: TurnStepInput = { turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 }
 
@@ -13,14 +13,12 @@ export const PROBE: Plugin = {
       if (e.command !== 'probe') return next(e)
       const read = async () => {
         switch (e.args) {
-          case 'turn':
-            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'turn' } as const)).value
           case 'trail':
             return (await $.state.get({ plugin: 'whispered-thoughts', key: 'trail' } as const)).value
           case 'ctx':
             return (await $.state.get({ plugin: 'whispered-thoughts', key: 'ctx' } as const)).value
           default:
-            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'line' } as const)).value
+            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'turn' } as const)).value
         }
       }
       return { text: JSON.stringify((await read()) ?? null) }
@@ -28,12 +26,12 @@ export const PROBE: Plugin = {
   },
 }
 
-type Probed = { line: ThinkingTail | null; turn: TurnMeta | null; trail: number[] | null; ctx: Ctx | null }
+type Probed = { turn: TurnMeta | null; trail: number[] | null; ctx: Ctx | null }
 
-export async function probe<K extends keyof Probed = 'line'>($: Engine, key?: K): Promise<Probed[K]> {
+export async function probe<K extends keyof Probed = 'turn'>($: Engine, key?: K): Promise<Probed[K]> {
   const { text } = await $.command.run({
     command: 'probe',
-    args: key ?? 'line',
+    args: key ?? 'turn',
     origin: { kind: 'composer' },
     presentation: { isFullscreen: false, columns: 120 },
   })
