@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { TurnStepChunk } from 'claude-code'
+import type { On, RenderElement, RenderPropsOf, TurnStepChunk } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
 import { PROBE, STEP, answerBelow, beneath, complete, drain, probe } from './testkit'
 
@@ -76,4 +77,47 @@ test('step 0 of a new turn starts a fresh turn', WITH_PROBE, async ($, on) => {
   const t = await probe($)
   expect(t?.focus).toEqual([])
   expect(t?.spans.map(s => s.phase)).toEqual(['wait', 'write'])
+})
+
+/** The engine's own Spinner: its word as text. */
+function engineSpinner(on: On) {
+  on('ui.render', { component: 'Spinner' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return h(Text, null, e.props.word) as RenderElement
+  })
+}
+
+const SPINNER = { word: 'Cooking', message: null, suffix: '…', mode: 'requesting' } as RenderPropsOf['Spinner']
+const spinner = ($: Engine) => $.ui.mount({ plugin: 'whispered-thoughts', surface: 'terminal', component: 'Spinner', props: SPINNER })
+
+test('the spinner mode opens phases the chunk stream misses on the next tick, and the spinner draws unchanged', WITH_PROBE, async ($, on) => {
+  const clock = mock.clock(on)
+  engineSpinner(on)
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }])
+  await drain($.turn.step(STEP))
+  const view = await spinner($)
+  await view.redraw({ ...SPINNER, mode: 'thinking' })
+  await clock.advance(1000)
+  await view.redraw({ ...SPINNER, mode: 'tool-use' })
+  await clock.advance(1000)
+  // Only the mode the spinner shows at a tick counts: the opening `requesting` was redrawn before one.
+  expect((await probe($))?.spans.map(s => s.phase)).toEqual(['wait', 'write', 'think', 'tool'])
+  expect(await view.find({ text: 'Cooking' })).toBeDefined()
+})
+
+test('the spinner changes nothing once the turn is done, or before any turn', WITH_PROBE, async ($, on) => {
+  const clock = mock.clock(on)
+  engineSpinner(on)
+  answerBelow(on)
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }])
+  const view = await spinner($)
+  await view.redraw({ ...SPINNER, mode: 'thinking' })
+  await clock.advance(1000)
+  expect(await probe($)).toBeNull()
+  await drain($.turn.step(STEP))
+  await complete($, {})
+  const spans = (await probe($))?.spans
+  await view.redraw({ ...SPINNER, mode: 'tool-use' })
+  await clock.advance(2000)
+  expect((await probe($))?.spans).toEqual(spans)
 })

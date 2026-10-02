@@ -22,7 +22,7 @@ The band appears when a turn starts and stays up after it ends, until the next t
 
 **Timeline row**
 
-One cell per second of the turn, so the strip grows while the turn runs, tool runs included. A long turn packs several seconds into each cell so the whole turn fits.
+One cell per second of the turn, so the strip grows while the turn runs, tool runs included. A long turn packs several seconds into each cell so the whole turn fits. When several phases touch one cell, it shows the most notable: thinking, then tool, then writing, then waiting.
 
 | Cell | Phase |
 | --- | --- |
@@ -31,7 +31,9 @@ One cell per second of the turn, so the strip grows while the turn runs, tool ru
 | `░` | Calling or running a tool |
 | `█` | Writing the answer |
 
-After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`.
+After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`. A phase under half a second reads `<1s`.
+
+Phases come from two sources: the model's chunks, and the mode of Claude Code's own spinner line (requesting, thinking, responding, tool input, tool use). The spinner still reports thinking when thinking summaries are off and no thinking text streams.
 
 **Meta row**
 
@@ -44,7 +46,7 @@ After the strip, the time spent in each phase: `think 11s · tools 13s · write 
 | `+0.6%` | How much this turn grew the context, in points of the window. Amber at 10 points or more. Negative after a compaction. |
 | `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest |
 
-When the terminal is narrow, the meta row drops parts in this order: the tool count, the trail, the token count. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. Under 12 cells it draws nothing.
+When the terminal is narrow, the meta row drops parts in this order: the tool count, the trail, the token count. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. Under 12 cells it draws nothing.
 
 The mod only follows the main conversation. Subagent thinking and turns are ignored. It makes no model calls, network requests or file writes.
 
@@ -58,7 +60,7 @@ The mod only follows the main conversation. Subagent thinking and turns are igno
   { "showThinkingSummaries": true }
   ```
 
-  The focus row reads the thinking text, so it stays at `∴ …` without this setting. The timeline and meta row work either way. With the setting on, the transcript also shows the thinking.
+  The focus row reads the thinking text, so it stays at `∴ …` without this setting. The timeline and meta row work either way, because the spinner still reports thinking. With the setting on, the transcript also shows the thinking.
 
 ## Install
 
@@ -83,6 +85,7 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
 ## How it works
 
 - A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, block and tool counts, and output tokens.
+- A `ui.render` hook on `Spinner` notes the spinner's mode and draws the spinner unchanged. Render hooks can't write state, so the ticker applies the noted mode as a phase, up to a second late.
 - A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.
 - A `ui.render` hook on the `AbovePrompt` band draws the rows from session state.

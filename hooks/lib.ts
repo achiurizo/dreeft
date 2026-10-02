@@ -84,12 +84,34 @@ export function phaseTotals(spans: Span[], end: number): Record<Phase, number> {
   return totals
 }
 
+/** Which phase a cell shows when several touch it: a short burst of thinking still marks its cell. */
+const RANK: Phase[] = ['think', 'tool', 'write', 'wait']
+
+/** The phases that run for some time inside [from, to), the turn ending at `end`. */
+function phasesIn(spans: Span[], from: number, to: number, end: number): Set<Phase> {
+  const seen = new Set<Phase>()
+  spans.forEach((s, i) => {
+    const stop = Math.min(to, spans[i + 1]?.at ?? end, end)
+    if (stop > Math.max(from, s.at)) seen.add(s.phase)
+  })
+  return seen
+}
+
 /** One cell per second of the turn, or whole seconds per cell once it outgrows `maxCells`. */
 export function timelineCells(spans: Span[], start: number, end: number, maxCells: number): Phase[] {
   const dur = Math.max(0, end - start)
   const cellMs = 1000 * Math.max(1, Math.ceil(Math.ceil(dur / 1000) / Math.max(1, maxCells)))
   // At least one cell, so the row is there from the turn's first moment.
-  return Array.from({ length: Math.max(1, Math.ceil(dur / cellMs)) }, (_, k) => phaseAt(spans, start + k * cellMs + cellMs / 2))
+  return Array.from({ length: Math.max(1, Math.ceil(dur / cellMs)) }, (_, k) => {
+    const from = start + k * cellMs
+    const seen = phasesIn(spans, from, from + cellMs, end)
+    return RANK.find(p => seen.has(p)) ?? phaseAt(spans, from)
+  })
+}
+
+/** The spinner's own word for what the turn is doing, as a phase. */
+export function phaseOfMode(mode: 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use'): Phase {
+  return mode === 'thinking' ? 'think' : mode === 'responding' ? 'write' : mode === 'requesting' ? 'wait' : 'tool'
 }
 
 export function newTurn(started: number, startTokens: number | null, window: number): TurnMeta {
@@ -107,6 +129,7 @@ export function newTurn(started: number, startTokens: number | null, window: num
     focus: [],
     hedges: 0,
     carry: '',
+    lastChunk: null,
   }
 }
 
@@ -128,7 +151,8 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
   switch (chunk.kind) {
     case 'thinking': {
       // Text may be empty (thinking summaries off): it is still thinking time, with nothing to scan.
-      const fresh = t.spans.at(-1)?.phase !== 'think'
+      // A block starts at the first thinking chunk after anything else; the spinner may have opened the span already.
+      const fresh = t.lastChunk !== 'thinking'
       const scan = scanThought(t.carry, chunk.text)
       return {
         ...enterPhase(t, 'think', now),
@@ -136,14 +160,15 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
         focus: addTerms(t.focus, scan.terms),
         hedges: t.hedges + scan.hedges,
         carry: scan.carry,
+        lastChunk: 'thinking',
       }
     }
     case 'text':
-      return enterPhase(flush(t), 'write', now)
+      return { ...enterPhase(flush(t), 'write', now), lastChunk: 'text' }
     case 'tool':
-      return { ...enterPhase(flush(t), 'tool', now), tools: t.tools + 1 }
+      return { ...enterPhase(flush(t), 'tool', now), tools: t.tools + 1, lastChunk: 'tool' }
     case 'stop':
-      return chunk.usage ? { ...t, now, outTok: t.outTok + chunk.usage.output_tokens } : t
+      return { ...t, now, outTok: t.outTok + (chunk.usage?.output_tokens ?? 0), lastChunk: 'stop' }
     default:
       return t
   }
@@ -165,8 +190,9 @@ export function timelineRow(spans: Span[], start: number, end: number, max: numb
   const sums = phaseTotals(spans, end)
   const totals: Seg[] = []
   for (const [phase, label] of TOTALS) {
-    if (Math.round(sums[phase] / 1000) === 0) continue
-    totals.push({ text: totals.length === 0 ? '  ' : ' · ', tone: 'dim' }, { text: `${label} ${formatSecs(sums[phase])}`, tone: TONE[phase] })
+    if (sums[phase] === 0) continue
+    const time = sums[phase] < 500 ? '<1s' : formatSecs(sums[phase])
+    totals.push({ text: totals.length === 0 ? '  ' : ' · ', tone: 'dim' }, { text: `${label} ${time}`, tone: TONE[phase] })
   }
   const room = max - width(totals)
   const cells = timelineCells(spans, start, end, room >= MIN_STRIP ? room : max)

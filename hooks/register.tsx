@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Ctx, TurnMeta } from '../types'
-import { enterPhase, focusRow, metaRow, newTurn, phaseTotals, reduceChunk, timelineRow, topTerms } from './lib'
+import type { Ctx, Phase, TurnMeta } from '../types'
+import { enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, topTerms } from './lib'
 import type { Seg } from './lib'
 
 export const TICK_MS = 1000
@@ -10,6 +10,8 @@ export const MAX_WIDTH = 84
 export const WIDTH_SHARE = 0.6
 export const MIN_WIDTH = 12
 export const FOCUS_TERMS = 3
+/** Cells the engine's `[-]` collapse mark covers at the band's top-right corner, plus a gap. */
+export const CORNER = 4
 
 export const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
 export const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
@@ -32,6 +34,8 @@ async function safely(fn: () => Promise<unknown>) {
 
 // One ticker while a main-loop turn runs, so the timeline grows between steps too (tools run there).
 let ticker: Timer | undefined
+/** The phase the spinner last drew, applied on the next tick; null until it draws this turn. */
+let spinnerPhase: Phase | null = null
 function stopTicker() {
   ticker?.cancel()
   ticker = undefined
@@ -43,7 +47,7 @@ function startTicker($: EngineInterface) {
       const now = await $.clock.now()
       const t = await read($, turn)
       if (!t || t.done) return stopTicker()
-      await update($, turn, x => x && { ...x, now })
+      await update($, turn, x => x && !x.done ? { ...(spinnerPhase ? enterPhase(x, spinnerPhase, now) : x), now } : x)
     })().catch(() => {})
   })
 }
@@ -72,6 +76,7 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       stopTicker()
+      spinnerPhase = null
       await safely(async () => {
         const t = await read($, turn)
         if (!t || t.done) return
@@ -102,13 +107,14 @@ export const register: Register = on => {
         const c = await read($, ctx)
         const now = await $.clock.now()
         await update($, turn, () => newTurn(now, c?.tokens ?? null, c?.window ?? 0))
+        spinnerPhase = null
         startTicker($)
       })
     } else {
       // Between steps a tool ran; this step starts by waiting on the model again.
       await safely(async () => {
         const now = await $.clock.now()
-        await update($, turn, t => t && enterPhase(t, 'wait', now))
+        await update($, turn, t => t && { ...enterPhase(t, 'wait', now), lastChunk: null })
       })
     }
 
@@ -130,6 +136,13 @@ export const register: Register = on => {
     }
   })
 
+  // The spinner knows what the turn is doing even when no chunk says so (thinking with summaries off).
+  // Drawing is pure, so it only notes the mode; the next tick folds it into the turn.
+  on('ui.render', { component: 'Spinner' }, async (_$, e, next) => {
+    spinnerPhase = phaseOfMode(e.props.mode)
+    return next(e)
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // Read every value first so a write to any of them redraws this band.
     const t = await read($, turn)
@@ -144,12 +157,17 @@ export const register: Register = on => {
     const growth = t.done ? t.final : growthOf(t, c)
     // Once done, the turn's own growth is already the trail's last entry.
     const history = t.done && t.final !== null ? turns.slice(0, -1) : turns
-    const meta = metaRow({ thinkMs: totals.think, blocks: t.blocks, tools: t.tools, outTok: t.outTok }, growth, history, width)
-    const rows: Seg[][] = [
-      focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, width),
-      timelineRow(t.spans, t.started, t.now, width),
-      ...(meta.length > 0 ? [meta] : []),
+    const metaFor = (max: number) =>
+      metaRow({ thinkMs: totals.think, blocks: t.blocks, tools: t.tools, outTok: t.outTok }, growth, history, max)
+    const builders = [
+      (max: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, max),
+      (max: number) => timelineRow(t.spans, t.started, t.now, max),
+      metaFor,
     ].slice(-Math.max(1, e.props.maxRows)) // a short band keeps the bottom rows
+    // The top row stops short of the corner the engine's [-] mark covers.
+    const rows: Seg[][] = builders
+      .map((build, i) => (i === 0 ? [...build(width - CORNER), { text: ' '.repeat(CORNER), tone: 'dim' as const }] : build(width)))
+      .filter(row => row.some(seg => seg.text.trim() !== ''))
 
     const { Box, Text } = $.ui.resolve(e)
     const seg = (part: Seg) =>

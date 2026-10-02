@@ -151,3 +151,14 @@ test('draws nothing on the desktop surface', async ($, on) => {
   expect(await joined(await mount($, {}, 'desktop'))).toBe('')
   await step.end()
 })
+
+test('the top row stays clear of the band\'s [-] corner', async ($, on) => {
+  mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'uses `metaRow` ')
+  const view = await mount($)
+  const top = (await view.findAll({ type: 'Box' }))[1]
+  expect(top?.text.endsWith('    ')).toBe(true)
+  expect(top?.text).toContain('∴')
+  await step.end()
+})
