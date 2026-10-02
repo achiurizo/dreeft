@@ -62,7 +62,8 @@ test('live line shimmers: some run is not dim once the window enters', async ($,
   const clock = mock.clock(on)
   const step = await thinking($, on, 'weighing the band placement')
   const view = await mount($)
-  await clock.advance(80 * 6)
+  // The sweep crosses the whole 72-cell band; the 27-cell line sits in its right end.
+  await clock.advance(80 * 60)
   const runs = (await view.findAll({ type: 'Text' })).filter(r => !r.text.startsWith('◆'))
   expect(runs.some(r => r.props.dimColor !== true)).toBe(true)
   expect(runs.some(r => r.props.dimColor === true)).toBe(true)
@@ -137,7 +138,7 @@ test('the oldest row is faint, the middle dim, only the newest shimmers', async 
   const clock = mock.clock(on)
   const step = await thinking($, on, 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda')
   const view = await mount($, { bodyColumns: 40 })
-  await clock.advance(80 * 6)
+  await clock.advance(80 * 20)
   const runs = await thoughtRuns(view)
   expect(runs[0]?.props).toMatchObject({ color: 'gray', dimColor: true })
   expect(runs[1]?.props.dimColor).toBe(true)

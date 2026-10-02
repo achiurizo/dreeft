@@ -47,12 +47,14 @@ export function wrapTail(text: string, width: number, rows: number): string[] {
 
 /**
  * Split `text` into dim and bright runs. The bright window's right edge sits at
- * `phase % (len + window)`, so it enters from the left, crosses, and leaves.
+ * `phase % (span + window)` across a `span`-cell band with `text` right-aligned in it, so it
+ * enters from the left, crosses, and leaves at a pace a short row cannot speed up.
  */
-export function shimmerSegments(text: string, phase: number, window: number): Run[] {
+export function shimmerSegments(text: string, phase: number, window: number, span = 0): Run[] {
   const points = Array.from(text)
   if (points.length === 0) return []
-  const end = phase % (points.length + window)
+  const band = Math.max(span, points.length)
+  const end = (phase % (band + window)) - (band - points.length)
   const start = Math.max(0, end - window)
   const stop = Math.min(points.length, end)
   if (stop <= start) return [{ text, dim: true }]
