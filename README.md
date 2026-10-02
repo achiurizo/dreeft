@@ -16,8 +16,12 @@ The band appears when a turn starts and stays up after it ends, until the next t
 
 **Focus row**
 
-- The three names the thinking mentions most this turn, with counts. A name has to come up at least twice to show; until one does, the row reads `∴ …`. A name is a backticked span, a file name or path, or a camelCase or snake_case identifier. Plain words don't count.
-- `⟲ 2` counts second-guesses: how often the thinking says "wait", "actually" or "hmm". Shown in amber.
+- The three names the turn comes back to most, with counts. A name has to come up at least twice to show; until one does, the row reads `∴ …`.
+- Names come from two places:
+  - The turn's tool calls: the file a tool reads or edits, code names in a search pattern, and file names in a shell command.
+  - The thinking text, when thinking summaries are on: a backticked span, a file name or path, or a camelCase or snake_case identifier.
+- Plain words and directories don't count.
+- `⟲ 2` counts second-guesses: how often the thinking says "wait", "actually" or "hmm". Shown in amber. Needs thinking summaries on.
 - This is a word-count heuristic, not a summary, so it can pick the wrong names.
 
 **Timeline row**
@@ -64,7 +68,7 @@ The mod only follows the main conversation. Subagent thinking and turns are igno
   { "showThinkingSummaries": true }
   ```
 
-  The focus row reads the thinking text, so it stays at `∴ …` without this setting. The timeline and meta row work either way, because the spinner still reports thinking. With the setting on, the transcript also shows the thinking.
+  Without this setting, the focus row gets names from tool calls only, and never counts second-guesses. The timeline and meta row work either way, because the spinner still reports thinking. With the setting on, the transcript also shows the thinking.
 
 ## Install
 
@@ -119,7 +123,7 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 
 ## How it works
 
-- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, block and tool counts, and output tokens.
+- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, block and tool counts, and output tokens. When a step ends, its tool calls' arguments add to the focus counts.
 - A `ui.render` hook on `Spinner` notes the spinner's mode and draws the spinner unchanged. Render hooks can't write state, so the ticker applies the noted mode as a phase, up to a second late.
 - A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.

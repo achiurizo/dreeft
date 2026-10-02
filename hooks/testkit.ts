@@ -1,4 +1,4 @@
-import type { On, TurnCompleteInput, TurnStepChunk, TurnStepInput, TurnStepResult } from 'claude-code'
+import type { On, TurnCompleteInput, TurnStepChunk, TurnStepInput, TurnStepResult, TurnStepToolUse } from 'claude-code'
 import type { Engine, Plugin } from 'claude-code/testing'
 
 import type { Ctx, TurnMeta } from '../types'
@@ -38,12 +38,17 @@ export async function probe<K extends keyof Probed = 'turn'>($: Engine, key?: K)
   return JSON.parse(text ?? 'null')
 }
 
+/** A step's chunks, or its chunks and the tool calls its result reports. */
+type Step = TurnStepChunk[] | { chunks: TurnStepChunk[]; toolUses: TurnStepToolUse[] }
+
 /** Stands for the model beneath the mod: yields each step's chunks in turn. */
-export function beneath(on: On, ...steps: TurnStepChunk[][]) {
+export function beneath(on: On, ...steps: Step[]) {
   const queue = [...steps]
   on('turn.step', async function* (_$, e): AsyncGenerator<TurnStepChunk, TurnStepResult> {
-    for (const chunk of queue.shift() ?? []) yield chunk
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+    const step = queue.shift() ?? []
+    const { chunks, toolUses } = Array.isArray(step) ? { chunks: step, toolUses: [] } : step
+    for (const chunk of chunks) yield chunk
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses, stopReason: 'end_turn', usage: null }
   })
 }
 

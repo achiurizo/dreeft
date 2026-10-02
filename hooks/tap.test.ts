@@ -61,6 +61,23 @@ test('a name split across chunks still counts toward focus', WITH_PROBE, async (
   expect(await probe($)).toMatchObject({ focus: [{ t: 'metaRow', n: 1 }], hedges: 1 })
 })
 
+test("a step's tool calls count toward focus, with no thinking text", WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, {
+    chunks: [
+      { kind: 'thinking', index: 0, text: '' },
+      { kind: 'tool', index: 1, id: 'tu1', name: 'Read' },
+      { kind: 'tool', index: 2, id: 'tu2', name: 'Edit' },
+    ],
+    toolUses: [
+      { name: 'Read', input: { file_path: '/repo/hooks/lib.ts' } },
+      { name: 'Edit', input: { file_path: '/repo/hooks/lib.ts', old_string: 'fooBar', new_string: 'bazQux' } },
+    ],
+  })
+  await drain($.turn.step(STEP))
+  expect(await probe($)).toMatchObject({ focus: [{ t: 'lib.ts', n: 2 }], hedges: 0 })
+})
+
 test('subagent steps never touch state', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   beneath(on, THINK_THEN_TOOL)
