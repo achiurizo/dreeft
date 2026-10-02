@@ -69,9 +69,25 @@ For every session, add it to the `env` block of `~/.claude/settings.json`:
 
 If hot reloading is enabled in a session, edits to `hooks/` take effect without a restart.
 
+## Settings
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| `hideThinkingInTranscript` | `false` | Experimental. The band still shows the main session's live thinking, but the mod stops passing thinking chunks on, so the transcript's live view doesn't stream it. Subagent thinking is unaffected. The engine keeps its own recorded copy of each thinking block, so a finished turn may still list it. |
+
+Change it with `/config`, or in `~/.claude/settings.json`:
+
+```json
+{
+  "pluginConfigs": {
+    "whispered-thoughts": { "options": { "hideThinkingInTranscript": true } }
+  }
+}
+```
+
 ## How it works
 
-- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. It records the thinking tail, thinking time, block count and output tokens.
+- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged, unless `hideThinkingInTranscript` is on. It records the thinking tail, thinking time, block count and output tokens.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.
 - A `ui.render` hook on the `AbovePrompt` band draws the rows from session state.
 - The shimmer timer runs only while thinking text is arriving.

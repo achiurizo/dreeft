@@ -88,3 +88,32 @@ test('step 0 of a new turn clears the previous frozen tail', WITH_PROBE, async (
   expect((await probe($))?.tail ?? '').toBe('')
   await drain(stream)
 })
+
+const HIDE = { options: { hideThinkingInTranscript: true } }
+
+test('hideThinkingInTranscript: thinking is not passed on, everything else is, in order', HIDE, async ($, on) => {
+  beneath(on, THINK_THEN_TOOL)
+  const out: TurnStepChunk[] = []
+  for await (const c of $.turn.step(STEP)) out.push(c)
+  expect(out).toEqual(THINK_THEN_TOOL.filter(c => c.kind !== 'thinking'))
+})
+
+test('hideThinkingInTranscript: the band still gets the tail', { ...HIDE, ...WITH_PROBE }, async ($, on) => {
+  beneath(on, THINK_THEN_TOOL)
+  await drain($.turn.step(STEP))
+  expect(await probe($)).toMatchObject({ tail: 'weighing the band placement', live: false })
+})
+
+test('hideThinkingInTranscript: subagent thinking still passes through', HIDE, async ($, on) => {
+  beneath(on, THINK_THEN_TOOL)
+  const out: TurnStepChunk[] = []
+  for await (const c of $.turn.step({ ...STEP, agentId: 'sub1' })) out.push(c)
+  expect(out).toEqual(THINK_THEN_TOOL)
+})
+
+test('off by default: thinking passes through', async ($, on) => {
+  beneath(on, THINK_THEN_TOOL)
+  const out: TurnStepChunk[] = []
+  for await (const c of $.turn.step(STEP)) out.push(c)
+  expect(out.filter(c => c.kind === 'thinking')).toHaveLength(2)
+})
