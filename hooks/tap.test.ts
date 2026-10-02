@@ -1,7 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { TurnStepChunk } from 'claude-code'
 
-import { PROBE, STEP, beneath, drain, probe } from './testkit'
+import { PROBE, STEP, answerBelow, beneath, complete, drain, probe } from './testkit'
 
 const THINK_THEN_TOOL: TurnStepChunk[] = [
   { kind: 'thinking', index: 0, text: 'weighing the ' },
@@ -13,78 +13,67 @@ const THINK_THEN_TOOL: TurnStepChunk[] = [
 const WITH_PROBE = { plugins: [PROBE] }
 
 test('passes every chunk through unchanged, in order', async ($, on) => {
+  mock.clock(on)
   beneath(on, THINK_THEN_TOOL)
   const out: TurnStepChunk[] = []
   for await (const c of $.turn.step(STEP)) out.push(c)
   expect(out).toEqual(THINK_THEN_TOOL)
 })
 
-test('thinking sets live and tail; a tool chunk freezes', WITH_PROBE, async ($, on) => {
+test('a step records its phases and counts its block and tool', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
   beneath(on, THINK_THEN_TOOL)
-  const stream = $.turn.step(STEP)
-  await stream.next()
-  await stream.next()
-  expect(await probe($)).toMatchObject({ tail: 'weighing the band placement', live: true })
-  await stream.next()
-  expect(await probe($)).toMatchObject({ tail: 'weighing the band placement', live: false })
-  await drain(stream)
+  await drain($.turn.step(STEP))
+  const t = await probe($)
+  expect(t?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'tool'])
+  expect(t).toMatchObject({ blocks: 1, tools: 1 })
 })
 
-test('clock advances phase only while live', WITH_PROBE, async ($, on) => {
-  const clock = mock.clock(on)
-  beneath(on, THINK_THEN_TOOL)
-  const stream = $.turn.step(STEP)
-  await stream.next()
-  await clock.advance(80 * 3)
-  expect((await probe($))?.phase).toBe(3)
-  await stream.next()
-  await stream.next()
-  await clock.advance(80 * 5)
-  expect((await probe($))?.phase).toBe(3)
-  await drain(stream)
+test('a later step starts by waiting on the model again', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, THINK_THEN_TOOL, [{ kind: 'text', index: 0, text: 'done' }])
+  await drain($.turn.step(STEP))
+  await drain($.turn.step({ ...STEP, index: 1 }))
+  expect((await probe($))?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'tool', 'wait', 'write'])
 })
 
-test('closing the stream mid-thinking (Esc) stops the clock and freezes', WITH_PROBE, async ($, on) => {
+test('the ticker moves the clock on between steps and stops at turn.complete', WITH_PROBE, async ($, on) => {
   const clock = mock.clock(on)
+  answerBelow(on)
   beneath(on, THINK_THEN_TOOL)
-  const stream = $.turn.step(STEP)
-  await stream.next()
-  await clock.advance(80)
-  await stream.return(undefined as never)
-  expect(await probe($)).toMatchObject({ live: false, phase: 1 })
-  await clock.advance(80 * 5)
-  expect((await probe($))?.phase).toBe(1)
+  await drain($.turn.step(STEP))
+  const started = (await probe($))?.started ?? 0
+  await clock.advance(3000)
+  expect(((await probe($))?.now ?? 0) - started).toBe(3000)
+  await complete($, {})
+  await clock.advance(5000)
+  expect(((await probe($))?.now ?? 0) - started).toBe(3000)
+})
+
+test('a name split across chunks still counts toward focus', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, [
+    { kind: 'thinking', index: 0, text: 'look at `meta' },
+    { kind: 'thinking', index: 0, text: 'Row` now, actually ' },
+  ])
+  await drain($.turn.step(STEP))
+  expect(await probe($)).toMatchObject({ focus: [{ t: 'metaRow', n: 1 }], hedges: 1 })
 })
 
 test('subagent steps never touch state', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
   beneath(on, THINK_THEN_TOOL)
   await drain($.turn.step({ ...STEP, agentId: 'sub1' }))
-  expect((await probe($))?.tail ?? '').toBe('')
+  expect(await probe($)).toBeNull()
 })
 
-test('a later block in the same turn keeps the previous one before a separator', WITH_PROBE, async ($, on) => {
-  beneath(
-    on,
-    [{ kind: 'thinking', index: 0, text: 'first' }, { kind: 'text', index: 1, text: 'ok' }],
-    [{ kind: 'thinking', index: 0, text: 'second' }],
-  )
+test('step 0 of a new turn starts a fresh turn', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, [{ kind: 'thinking', index: 0, text: 'uses `oldName` ' }], [{ kind: 'text', index: 0, text: 'hi' }])
   await drain($.turn.step(STEP))
-  const stream = $.turn.step({ ...STEP, index: 1 })
-  await stream.next()
-  expect((await probe($))?.tail).toBe('first ┊ second')
-  await drain(stream)
-})
-
-test('step 0 of a new turn clears the previous frozen tail', WITH_PROBE, async ($, on) => {
-  beneath(
-    on,
-    [{ kind: 'thinking', index: 0, text: 'old' }, { kind: 'text', index: 1, text: 'x' }],
-    [{ kind: 'text', index: 0, text: 'hi' }],
-  )
-  await drain($.turn.step(STEP))
-  expect((await probe($))?.tail).toBe('old')
-  const stream = $.turn.step({ ...STEP, turnId: 't2' })
-  await stream.next()
-  expect((await probe($))?.tail ?? '').toBe('')
-  await drain(stream)
+  expect((await probe($))?.focus).toHaveLength(1)
+  await drain($.turn.step({ ...STEP, turnId: 't2' }))
+  const t = await probe($)
+  expect(t?.focus).toEqual([])
+  expect(t?.spans.map(s => s.phase)).toEqual(['wait', 'write'])
 })
