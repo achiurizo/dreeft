@@ -52,7 +52,18 @@ function startTicker($: EngineInterface) {
   })
 }
 
-export const register: Register = on => {
+/** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
+type Ink = { color?: string; dimColor?: boolean }
+export const PALETTES: Record<string, { think: Ink; tool: Ink }> = {
+  mono: { think: {}, tool: { dimColor: true } },
+  amber: { think: { color: 'yellow' }, tool: { dimColor: true } },
+  blue: { think: { color: 'blue' }, tool: { dimColor: true } },
+  magenta: { think: { color: 'magenta' }, tool: { color: 'cyan' } },
+}
+
+export const register: Register = (on, options) => {
+  const palette = PALETTES[String(options.palette)] ?? PALETTES.mono
+
   on('session.start', async ($, e, next) => {
     // A reload drops the module's ticker; pick it back up if a turn is still running.
     await safely(async () => {
@@ -180,9 +191,9 @@ export const register: Register = on => {
       ) : part.tone === 'warn' ? (
         <Text color="yellow">{part.text}</Text>
       ) : part.tone === 'think' ? (
-        <Text color="magenta">{part.text}</Text>
+        <Text {...palette?.think}>{part.text}</Text>
       ) : part.tone === 'tool' ? (
-        <Text color="cyan">{part.text}</Text>
+        <Text {...palette?.tool}>{part.text}</Text>
       ) : (
         <Text>{part.text}</Text>
       )
