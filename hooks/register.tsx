@@ -22,8 +22,8 @@ const CORNER = 4
 const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
 /** The current main-loop turn, or the last one until the next starts. */
 const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
-/** Recent main-loop turns' growth, in points of the window, oldest first. */
-const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as number[])
+/** Recent main-loop turns' growth, in points of the window, oldest first; null marks a compaction. */
+const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as (number | null)[])
 /** Turns of growth the trail keeps. */
 const TRAIL_MAX = 20
 
@@ -110,6 +110,15 @@ export const register: Register = (on, options) => {
       })
     }
     return next(e)
+  })
+
+  on('session.compact', async ($, e, next) => {
+    const result = await next(e)
+    // A precompute installs nothing, and a skip leaves the conversation as it was.
+    if (e.agentId === undefined && e.trigger !== 'precompute' && result.messages !== undefined) {
+      await safely(() => update($, trail, past => [...past, null].slice(-TRAIL_MAX)))
+    }
+    return result
   })
 
   on('turn.step', async function* ($, e, next) {

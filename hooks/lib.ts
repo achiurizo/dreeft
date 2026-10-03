@@ -290,6 +290,8 @@ export function focusRow(top: Term[], hedges: number, max: number): Seg[] {
 
 /** Braille cells in the meta row's growth trail, two turns per cell. */
 const TRAIL_CELLS = 10
+/** Marks a compaction in the growth trail: the context dropped there. */
+const CUT = '↓'
 const LEFT = [0, 0x40, 0x44, 0x46, 0x47]
 const RIGHT = [0, 0x80, 0xa0, 0xb0, 0xb8]
 
@@ -308,16 +310,34 @@ export function braille(values: number[]): string {
 /**
  * Per-turn growth as braille: `past` holds earlier turns, `now` the newest cell. Scales to the
  * largest value shown; every real turn gets at least one dot (negatives count as 0), padding none.
- * @param history - earlier turns' growth, in points of the window, oldest first
+ * A compaction draws `↓` in amber before the cell holding the first turn after it.
+ * @param history - earlier turns' growth, in points of the window, oldest first; null marks a compaction
  * @param current - this turn's growth in points, or null when unmeasured
  * @param cells - braille cells to draw, two turns each
  */
-export function growthTrail(history: number[], current: number | null, cells: number): { past: string; now: string } {
-  const real = [...history, current ?? 0].map(v => Math.max(0, v)).slice(-cells * 2)
-  const max = Math.max(...real) || 1
-  const levels = real.map(v => Math.max(1, Math.round((v / max) * 4)))
-  while (levels.length < cells * 2) levels.unshift(0)
-  return { past: dots(levels.slice(0, -2)), now: dots(levels.slice(-2)) }
+export function growthTrail(history: (number | null)[], current: number | null, cells: number): { past: Seg[]; now: string } {
+  const turns: number[] = []
+  const cuts = new Set<number>() // a compaction before turns[i]
+  for (const v of [...history, current ?? 0]) {
+    if (v === null) cuts.add(turns.length)
+    else turns.push(Math.max(0, v))
+  }
+  const shown = turns.slice(-cells * 2)
+  const first = turns.length - shown.length
+  const pad = cells * 2 - shown.length
+  const max = Math.max(...shown) || 1
+  const levels = [...Array<number>(pad).fill(0), ...shown.map(v => Math.max(1, Math.round((v / max) * 4)))]
+  const cutCells = new Set([...cuts].filter(i => i >= first).map(i => Math.floor((i - first + pad) / 2)))
+  const past: Seg[] = []
+  for (let k = 0; k < cells; k++) {
+    if (cutCells.has(k)) past.push({ text: CUT, tone: 'warn' })
+    if (k === cells - 1) break
+    const cell = dots(levels.slice(k * 2, k * 2 + 2))
+    const last = past.at(-1)
+    if (last?.tone === 'dim') last.text += cell
+    else past.push({ text: cell, tone: 'dim' })
+  }
+  return { past, now: dots(levels.slice(-2)) }
 }
 
 /** A token count as `950`, `1.8k` or `42k`. */
@@ -337,9 +357,9 @@ export function formatGrowth(points: number): string {
 /**
  * Meta row, fitted to `max` cells: drop the tool count, the trail, the token count, then the whole row.
  * @param growth - this turn's growth in points of the window, or null when unmeasured
- * @param history - earlier turns' growth in points, oldest first
+ * @param history - earlier turns' growth in points, oldest first; null marks a compaction
  */
-export function metaRow(meta: Meta, growth: number | null, history: number[], max: number): Seg[] {
+export function metaRow(meta: Meta, growth: number | null, history: (number | null)[], max: number): Seg[] {
   const head = `◆ ${formatSecs(meta.thinkMs)} · ${meta.blocks} blk`
   const tools = ` · ${meta.tools} ${meta.tools === 1 ? 'tool' : 'tools'}`
   const out = ` · ${formatTokens(meta.outTok)} out`
@@ -350,7 +370,7 @@ export function metaRow(meta: Meta, growth: number | null, history: number[], ma
   const tone: Tone = growth >= 10 ? 'warn' : 'bright'
   const g: Seg[] = [{ text: '   ', tone: 'dim' }, { text: formatGrowth(growth), tone }]
   const trail = growthTrail(history, growth, TRAIL_CELLS)
-  const t: Seg[] = [{ text: ' ' + trail.past, tone: 'dim' }, { text: trail.now, tone }]
+  const t: Seg[] = [{ text: ' ', tone: 'dim' }, ...trail.past, { text: trail.now, tone }]
   const candidates: Seg[][] = [
     [{ text: head + tools + out, tone: 'dim' }, ...g, ...t],
     [{ text: head + out, tone: 'dim' }, ...g, ...t],

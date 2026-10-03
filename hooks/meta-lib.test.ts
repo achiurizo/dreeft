@@ -33,19 +33,35 @@ describe('formatters', () => {
 })
 
 describe('growthTrail', () => {
+  const flat = (t: ReturnType<typeof growthTrail>) => ({ past: t.past.map(s => s.text).join(''), now: t.now })
   test('negative growth draws as a zero turn: one dot, never blank', () => {
-    expect(growthTrail([], -38, 1)).toEqual({ past: '', now: '\u2880' })
+    expect(flat(growthTrail([], -38, 1))).toEqual({ past: '', now: '\u2880' })
   })
   test('small growth values still draw: scale to the largest value shown', () => {
-    expect(growthTrail([0.2, 0.4], 0.3, 2)).toEqual({ past: '\u28a0', now: '\u28f7' })
+    expect(flat(growthTrail([0.2, 0.4], 0.3, 2))).toEqual({ past: '\u28a0', now: '\u28f7' })
   })
   test('a real zero-growth turn shows one dot; padding stays blank', () => {
-    expect(growthTrail([0], 0, 2)).toEqual({ past: '\u2800', now: '\u28c0' })
+    expect(flat(growthTrail([0], 0, 2))).toEqual({ past: '\u2800', now: '\u28c0' })
   })
   test('scales to the largest value; newest cell holds previous and current', () => {
-    const t = growthTrail([2, 4], 4, 2)
+    const t = flat(growthTrail([2, 4], 4, 2))
     expect(Array.from(t.past + t.now)).toHaveLength(2)
     expect(t.now).toBe('⣿')
+  })
+  test('a compaction draws an amber ↓ before the cell it landed in', () => {
+    const t = growthTrail([2, null, 4], 4, 2)
+    expect(flat(t)).toEqual({ past: '⢠↓', now: '⣿' })
+    expect(t.past.at(-1)).toEqual({ text: '↓', tone: 'warn' })
+  })
+  test('a compaction during the current turn marks the newest cell', () => {
+    expect(flat(growthTrail([1, 1, null], -40, 2)).past.endsWith('↓')).toBe(true)
+  })
+  test('a compaction scrolled out of view draws nothing', () => {
+    expect(flat(growthTrail([null, 1, 1, 1, 1], 1, 2)).past.includes('↓')).toBe(false)
+  })
+  test('the meta row shows the mark in amber', () => {
+    const row = metaRow({ thinkMs: 0, blocks: 1, tools: 0, outTok: 0 }, 1, [1, null], 80)
+    expect(row).toContainEqual({ text: '↓', tone: 'warn' })
   })
 })
 

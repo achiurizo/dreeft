@@ -64,6 +64,30 @@ test('a subagent turn.complete never touches the trail', WITH_PROBE, async ($, o
   expect((await probe($, 'trail')) ?? []).toEqual([])
 })
 
+const SUMMARY = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
+
+test('a main-loop compaction marks the trail', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  answerBelow(on)
+  on('session.compact', async () => ({ messages: SUMMARY, tokensBefore: 800_000, tokensAfter: 40_000 }))
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }])
+  await measure($, 100_000, 1_000_000)
+  await drain($.turn.step(STEP))
+  await measure($, 106_000, 1_000_000)
+  await complete($, {})
+  await $.session.compact({ trigger: 'manual', messages: SUMMARY })
+  expect(await probe($, 'trail')).toEqual([0.6, null])
+})
+
+test('a precompute, a skipped compaction or a subagent compaction leaves the trail alone', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  on('session.compact', async (_$, e) => (e.trigger === 'auto' ? { skip: 'vetoed' } : { messages: SUMMARY }))
+  await $.session.compact({ trigger: 'precompute', messages: SUMMARY })
+  await $.session.compact({ trigger: 'auto', messages: SUMMARY })
+  await $.session.compact({ trigger: 'manual', agentId: 'sub1', messages: SUMMARY })
+  expect((await probe($, 'trail')) ?? []).toEqual([])
+})
+
 const USAGE = (input: number, output: number): TurnStepChunk => ({
   kind: 'stop', stopReason: 'end_turn',
   usage: { model: 'm', input_tokens: input, output_tokens: output, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
