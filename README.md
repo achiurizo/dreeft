@@ -1,4 +1,4 @@
-# whispered-thoughts
+# dreeft
 
 A Claude Code mod that shows what the session's thinking is doing, right above the prompt.
 
@@ -74,8 +74,8 @@ The mod only follows the main conversation. Subagent thinking and turns are igno
 From the marketplace, inside Claude Code:
 
 ```text
-/plugin marketplace add achiurizo/whispered-thoughts
-/plugin install whispered-thoughts@whispered-thoughts
+/plugin marketplace add achiurizo/dreeft
+/plugin install dreeft@dreeft
 ```
 
 Restart Claude Code, or run `/reload-plugins`, to load it.
@@ -85,20 +85,20 @@ Restart Claude Code, or run `/reload-plugins`, to load it.
 Clone the repo:
 
 ```sh
-git clone https://github.com/achiurizo/whispered-thoughts.git
+git clone https://github.com/achiurizo/dreeft.git
 ```
 
 Load the clone for one session:
 
 ```sh
-claude --plugin-dir ./whispered-thoughts
+claude --plugin-dir ./dreeft
 ```
 
 Or load the clone in every session: add its absolute path to the `env` block of `~/.claude/settings.json`.
 
 ```json
 {
-  "env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/whispered-thoughts" }
+  "env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/dreeft" }
 }
 ```
 
@@ -116,7 +116,7 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 ```json
 {
   "pluginConfigs": {
-    "whispered-thoughts": { "options": { "palette": "amber" } }
+    "dreeft": { "options": { "palette": "amber" } }
   }
 }
 ```
@@ -132,12 +132,12 @@ With `memoryShadow` set to `on`, after each main-loop turn that was not interrup
    - **focus**: a name the turn came back to at least twice, with the thinking sentences that mention it.
 2. Each candidate gets outcome evidence from the same turn: the last successful tool result that names it, else the sentence of the answer that names it. A candidate with no evidence is still logged, with `confirmed: false`.
 3. One Haiku 4.5 call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
-4. One JSON line per candidate is appended to `~/.local/state/whispered-thoughts/memory-shadow.jsonl`: time, session, turn, project, candidate source, span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`), and for a keep the fact, memory type and name, topic, keywords and importance. Each line also records the judge call's token usage.
+4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`: time, session, turn, project, candidate source, span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`), and for a keep the fact, memory type and name, topic, keywords and importance. Each line also records the judge call's token usage.
 
 Read the kept facts:
 
 ```sh
-jq -c 'select(.verdict == "keep") | {confirmed, importance, topic, fact}' ~/.local/state/whispered-thoughts/memory-shadow.jsonl
+jq -c 'select(.verdict == "keep") | {confirmed, importance, topic, fact}' ~/.local/state/dreeft/memory-shadow.jsonl
 ```
 
 ## How it works

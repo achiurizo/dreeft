@@ -21,11 +21,11 @@ const FOCUS_TERMS = 3
 const CORNER = 4
 
 /** The session's context size, kept current by measures and each step's usage. */
-const ctx = atom({ plugin: 'whispered-thoughts', key: 'ctx' } as const, null as Ctx | null)
+const ctx = atom({ plugin: 'dreeft', key: 'ctx' } as const, null as Ctx | null)
 /** The current main-loop turn, or the last one until the next starts. */
-const turn = atom({ plugin: 'whispered-thoughts', key: 'turn' } as const, null as TurnMeta | null)
+const turn = atom({ plugin: 'dreeft', key: 'turn' } as const, null as TurnMeta | null)
 /** Recent main-loop turns' growth, in points of the window, oldest first; null marks a compaction. */
-const trail = atom({ plugin: 'whispered-thoughts', key: 'trail' } as const, [] as (number | null)[])
+const trail = atom({ plugin: 'dreeft', key: 'trail' } as const, [] as (number | null)[])
 /** Turns of growth the trail keeps. */
 const TRAIL_MAX = 20
 
@@ -69,7 +69,7 @@ function startTicker($: EngineInterface) {
 /** The cheapest model the judge may use. */
 const JUDGE_MODEL = 'claude-haiku-4-5-20251001'
 /** The log, under `$HOME`. */
-const LOG_DIR = '.local/state/whispered-thoughts'
+const LOG_DIR = '.local/state/dreeft'
 const LOG_FILE = 'memory-shadow.jsonl'
 
 /** The project's name and its main checkout, found once per load. */

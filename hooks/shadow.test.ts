@@ -76,9 +76,9 @@ describe('selectCandidates', () => {
 
 describe('parseVerdicts', () => {
   test('one verdict per candidate, by index; a missing index is an error', () => {
-    const reply = 'Sure: {"verdicts":[{"i":1,"verdict":"drop","reason":"task status"},{"i":0,"verdict":"keep","fact":"whispered-thoughts: $.fs has no append.","type":"project","name":"Fs No Append","topic":"context-whispered-thoughts","keywords":["fs","append"],"importance":"high","reason":"gotcha"}]}'
+    const reply = 'Sure: {"verdicts":[{"i":1,"verdict":"drop","reason":"task status"},{"i":0,"verdict":"keep","fact":"dreeft: $.fs has no append.","type":"project","name":"Fs No Append","topic":"context-dreeft","keywords":["fs","append"],"importance":"high","reason":"gotcha"}]}'
     const [keep, drop, missing] = parseVerdicts(reply, 3)
-    expect(keep).toEqual({ verdict: 'keep', fact: 'whispered-thoughts: $.fs has no append.', type: 'project', name: 'fs-no-append', topic: 'context-whispered-thoughts', keywords: ['fs', 'append'], importance: 'high', reason: 'gotcha' })
+    expect(keep).toEqual({ verdict: 'keep', fact: 'dreeft: $.fs has no append.', type: 'project', name: 'fs-no-append', topic: 'context-dreeft', keywords: ['fs', 'append'], importance: 'high', reason: 'gotcha' })
     expect(drop).toMatchObject({ verdict: 'drop', fact: null, reason: 'task status' })
     expect(missing).toMatchObject({ verdict: 'error' })
   })

@@ -39,7 +39,7 @@ function engineBand(on: On) {
 }
 
 function mount($: Engine, props: Partial<RenderPropsOf['AbovePrompt']> = {}, surface: RenderSurface = 'terminal') {
-  return $.ui.mount({ plugin: 'whispered-thoughts', surface, component: 'AbovePrompt', props: { ...PROPS, ...props } })
+  return $.ui.mount({ plugin: 'dreeft', surface, component: 'AbovePrompt', props: { ...PROPS, ...props } })
 }
 
 async function runs(view: Awaited<ReturnType<typeof mount>>) {
