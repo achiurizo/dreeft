@@ -1,10 +1,10 @@
 {
-  "name": "whispered-thoughts",
+  "name": "dreeft",
   "owner": { "name": "Arthur Chiu", "url": "https://github.com/achiurizo" },
-  "metadata": { "description": "The whispered-thoughts Claude Code mod" },
+  "metadata": { "description": "The dreeft Claude Code mod" },
   "plugins": [
     {
-      "name": "whispered-thoughts",
+      "name": "dreeft",
       "source": "./",
       "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
       "author": { "name": "Arthur Chiu", "url": "https://github.com/achiurizo" },

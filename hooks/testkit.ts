@@ -14,11 +14,11 @@ export const PROBE: Plugin = {
       const read = async () => {
         switch (e.args) {
           case 'trail':
-            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'trail' } as const)).value
+            return (await $.state.get({ plugin: 'dreeft', key: 'trail' } as const)).value
           case 'ctx':
-            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'ctx' } as const)).value
+            return (await $.state.get({ plugin: 'dreeft', key: 'ctx' } as const)).value
           default:
-            return (await $.state.get({ plugin: 'whispered-thoughts', key: 'turn' } as const)).value
+            return (await $.state.get({ plugin: 'dreeft', key: 'turn' } as const)).value
         }
       }
       return { text: JSON.stringify((await read()) ?? null) }

@@ -105,7 +105,7 @@ function engineSpinner(on: On) {
 }
 
 const SPINNER = { word: 'Cooking', message: null, suffix: '…', mode: 'requesting' } as RenderPropsOf['Spinner']
-const spinner = ($: Engine) => $.ui.mount({ plugin: 'whispered-thoughts', surface: 'terminal', component: 'Spinner', props: SPINNER })
+const spinner = ($: Engine) => $.ui.mount({ plugin: 'dreeft', surface: 'terminal', component: 'Spinner', props: SPINNER })
 
 test('the spinner mode opens phases the chunk stream misses on the next tick, and the spinner draws unchanged', WITH_PROBE, async ($, on) => {
   const clock = mock.clock(on)

@@ -8,7 +8,7 @@ import { STEP, answerBelow, beneath, complete, drain } from './testkit'
 const ON = { options: { memoryShadow: 'on' } }
 const USAGE = { input_tokens: 900, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
 const THINKING = 'Actually, the engine never hands tool results to turn.step chunks at all.'
-const KEEP = '{"verdicts":[{"i":0,"verdict":"keep","fact":"whispered-thoughts: tool results reach tool.call only.","type":"project","name":"tool-results-in-tool-call","topic":"context-whispered-thoughts","keywords":["tool.call"],"importance":"high","reason":"gotcha"}]}'
+const KEEP = '{"verdicts":[{"i":0,"verdict":"keep","fact":"dreeft: tool results reach tool.call only.","type":"project","name":"tool-results-in-tool-call","topic":"context-dreeft","keywords":["tool.call"],"importance":"high","reason":"gotcha"}]}'
 
 /** The world beneath the mod: the model, the shell, the session; records what the mod asked of them. */
 function world(on: On) {
@@ -53,14 +53,14 @@ test('a turn with a candidate: one judge call, one record per candidate appended
   expect(w.logged).toEqual([])
   expect(w.asked).toHaveLength(1)
   expect(w.asked[0]?.model).toBe('claude-haiku-4-5-20251001')
-  expect(w.argvs.find(a => a[0] === '/bin/sh')).toEqual(['/bin/sh', '-c', 'mkdir -p "$1" && cat >> "$1/$2"', 'sh', '/home/u/.local/state/whispered-thoughts', 'memory-shadow.jsonl'])
+  expect(w.argvs.find(a => a[0] === '/bin/sh')).toEqual(['/bin/sh', '-c', 'mkdir -p "$1" && cat >> "$1/$2"', 'sh', '/home/u/.local/state/dreeft', 'memory-shadow.jsonl'])
   // Shadow mode only: git lookups and the log append, never icm or the flush staging queue.
   expect(w.argvs.map(a => a[0] === '/bin/sh' ? 'sh' : a.slice(0, 1).join(''))).toEqual(['git', 'git', 'sh'])
   const records: ShadowRecord[] = w.appended.join('').trim().split('\n').map(l => JSON.parse(l))
   expect(records).toHaveLength(1)
   expect(records[0]).toMatchObject({
     schema: 1, ts: '2026-10-02T00:00:00.000Z', session: expect.any(String), turn: 't1', project: 'https://github.com/a/b.git', root: '/repo',
-    source: 'hedge', span: THINKING, confirmed: false, verdict: 'keep', topic: 'context-whispered-thoughts', importance: 'high',
+    source: 'hedge', span: THINKING, confirmed: false, verdict: 'keep', topic: 'context-dreeft', importance: 'high',
     judge: { model: 'claude-haiku-4-5-20251001', candidates: 1, input_tokens: 900, output_tokens: 80 },
   })
 })
