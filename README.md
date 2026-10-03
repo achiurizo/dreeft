@@ -160,9 +160,9 @@ jq -c 'select(.verdict == "keep") | {confirmed, importance, topic, fact}' ~/.loc
 ## Development
 
 ```sh
-claude plugin test .              # run the tests
-claude plugin validate .          # check manifest, hooks and declared state
-npx -p typescript tsc -p .        # type-check
+claude plugin test .                                  # run the tests
+claude plugin validate .claude-plugin/plugin.json     # check manifest, hooks and declared state
+npx -p typescript tsc -p .                            # type-check
 ```
 
 Type-checking needs `.claude-plugin/types/`. Claude Code writes that folder each time a session loads the mod from a local folder, such as with `--plugin-dir`. The folder is gitignored, so a fresh clone can't type-check until you start Claude Code once with `claude --plugin-dir .`. A marketplace install does not write it.

@@ -19,7 +19,8 @@ jobs:
       # Mods need 2.1.287+; bump the pin to pick up engine type changes.
       - run: npm install -g @anthropic-ai/claude-code@2.1.288
       - run: claude plugin test .
-      - run: claude plugin validate --strict .
+      # At the repo root `validate .` picks the marketplace manifest; name the plugin's to check it and the hooks.
+      - run: claude plugin validate --strict .claude-plugin/plugin.json
       - run: claude plugin validate --strict .claude-plugin/marketplace.json
       # The engine writes .claude-plugin/types when a session loads the mod from a folder,
       # before the login check, so this fails with no auth but leaves the types behind.
