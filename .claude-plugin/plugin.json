@@ -29,6 +29,16 @@
         "blue",
         "magenta"
       ]
+    },
+    "memoryShadow": {
+      "type": "string",
+      "title": "Memory shadow log (experimental)",
+      "description": "on: after each main-loop turn, pick candidate facts from the thinking, judge them with Haiku (one call per turn with candidates) and append the verdicts to ~/.local/state/whispered-thoughts/memory-shadow.jsonl. Never writes memory.",
+      "default": "off",
+      "options": [
+        "off",
+        "on"
+      ]
     }
   }
 }
