@@ -239,13 +239,13 @@ describe('reduceChunk', () => {
     expect(t.focus).toEqual([{ t: 'metaRow', n: 1 }])
   })
 
-  test('stop usage adds output tokens', () => {
+  test('stop moves the clock on and changes no phase', () => {
     const t = reduceChunk(
       t0,
       { kind: 'stop', stopReason: 'end_turn', usage: { model: 'm', input_tokens: 1, output_tokens: 40, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
       100,
     )
-    expect(t.outTok).toBe(40)
+    expect(t).toMatchObject({ now: 100, spans: t0.spans, lastChunk: 'stop' })
   })
 })
 

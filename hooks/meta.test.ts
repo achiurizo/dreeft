@@ -10,7 +10,7 @@ const STOP = (output_tokens: number): TurnStepChunk => ({
   usage: { model: 'm', input_tokens: 1, output_tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
 })
 
-test('step 0 snapshots context; blocks, think time and output tokens accumulate', WITH_PROBE, async ($, on) => {
+test('step 0 snapshots context; blocks and think time accumulate', WITH_PROBE, async ($, on) => {
   const clock = mock.clock(on)
   answerBelow(on)
   beneath(on,
@@ -27,7 +27,7 @@ test('step 0 snapshots context; blocks, think time and output tokens accumulate'
   await clock.advance(1000)
   await drain(s1)
   const t = await probe($, 'turn')
-  expect(t).toMatchObject({ blocks: 2, tools: 1, outTok: 1000, startTokens: 100_000, window: 1_000_000, done: false })
+  expect(t).toMatchObject({ blocks: 2, tools: 1, startTokens: 100_000, window: 1_000_000, done: false })
   expect(t && phaseTotals(t.spans, t.now).think).toBe(3000)
 })
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { braille, formatGrowth, formatTokens, growthTrail, metaRow } from './lib'
+import { braille, formatGrowth, growthTrail, metaRow } from './lib'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -19,11 +19,6 @@ describe('braille', () => {
 })
 
 describe('formatters', () => {
-  test('tokens', () => {
-    expect(formatTokens(842)).toBe('842')
-    expect(formatTokens(1840)).toBe('1.8k')
-    expect(formatTokens(23400)).toBe('23k')
-  })
   test('growth: signed, one decimal under 10 points', () => {
     expect(formatGrowth(0.62)).toBe('+0.6%')
     expect(formatGrowth(12.4)).toBe('+12%')
@@ -50,26 +45,25 @@ describe('growthTrail', () => {
 })
 
 describe('metaRow', () => {
-  const meta = { thinkMs: 12_300, blocks: 3, tools: 4, outTok: 1840 }
+  const meta = { thinkMs: 12_300, blocks: 3, tools: 4 }
   test('full row fits on a wide band', () => {
     const row = metaRow(meta, 0.62, [1, 2], 56)
-    expect(text(row).startsWith('◆ 12s · 3 blk · 4 tools · 1.8k out   +0.6% ')).toBe(true)
+    expect(text(row).startsWith('◆ 12s · 3 blk · 4 tools   +0.6% ')).toBe(true)
     expect(row.find(s => s.text === '+0.6%')?.tone).toBe('bright')
   })
   test('one tool is singular', () => {
-    expect(text(metaRow({ ...meta, tools: 1 }, null, [], 56))).toBe('◆ 12s · 3 blk · 1 tool · 1.8k out')
+    expect(text(metaRow({ ...meta, tools: 1 }, null, [], 56))).toBe('◆ 12s · 3 blk · 1 tool')
   })
   test('growth of 10 or more is amber', () => {
     expect(metaRow(meta, 12, [], 56).find(s => s.text === '+12%')?.tone).toBe('warn')
   })
-  test('drops the tool count first, then the trail, then the token count, then everything', () => {
-    expect(text(metaRow(meta, 0.62, [], 50))).not.toContain('tools')
-    expect(text(metaRow(meta, 0.62, [], 50))).toMatch(/\+0\.6% \S/)
-    expect(text(metaRow(meta, 0.62, [], 40))).toBe('◆ 12s · 3 blk · 1.8k out   +0.6%')
+  test('drops the tool count first, then the trail, then everything', () => {
+    expect(text(metaRow(meta, 0.62, [], 40))).not.toContain('tools')
+    expect(text(metaRow(meta, 0.62, [], 40))).toMatch(/\+0\.6% \S/)
     expect(text(metaRow(meta, 0.62, [], 25))).toBe('◆ 12s · 3 blk   +0.6%')
     expect(metaRow(meta, 0.62, [], 12)).toEqual([])
   })
   test('null growth shows metadata only, no trail', () => {
-    expect(text(metaRow(meta, null, [3], 56))).toBe('◆ 12s · 3 blk · 4 tools · 1.8k out')
+    expect(text(metaRow(meta, null, [3], 56))).toBe('◆ 12s · 3 blk · 4 tools')
   })
 })

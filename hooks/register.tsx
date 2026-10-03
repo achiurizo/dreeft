@@ -186,7 +186,7 @@ export const register: Register = (on, options) => {
     // Once done, the turn's own growth is already the trail's last entry.
     const history = t.done && t.final !== null ? turns.slice(0, -1) : turns
     const metaFor = (max: number) =>
-      metaRow({ thinkMs: totals.think, blocks: t.blocks, tools: t.tools, outTok: t.outTok }, growth, history, max)
+      metaRow({ thinkMs: totals.think, blocks: t.blocks, tools: t.tools }, growth, history, max)
     const builders = [
       (max: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, max),
       (max: number) => timelineRow(t.spans, t.started, t.now, max),

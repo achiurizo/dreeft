@@ -7,7 +7,7 @@ The transcript already shows the thinking itself. The band shows the data around
 ```text
                          ∴ register.tsx ×6 · metaRow ×4 · observe ×2   ⟲ 2
                    ▀▀▀▀▀▄▄▄▄▄▄▄▄▄ ▀▀▀▀▀▀▄▄▄▄ █████▕  think 11s · tools 13s · write 5s
-             ◆ 11s · 2 blk · 3 tools · 1.8k out   +0.6% ⠀⢀⣀⣠⣤⣴⣀⣠⣤⣶
+             ◆ 11s · 2 blk · 3 tools   +0.6% ⠀⢀⣀⣠⣤⣴⣀⣠⣤⣶
 ```
 
 ## What it shows
@@ -50,11 +50,10 @@ Phases come from two sources: the model's chunks, and the mode of Claude Code's 
 | `◆ 11s` | Time spent thinking this turn |
 | `2 blk` | Thinking blocks this turn |
 | `3 tools` | Tool calls this turn |
-| `1.8k out` | Output tokens this turn (thinking included) |
 | `+0.6%` | How much this turn grew the context, in points of the window. Amber at 10 points or more. Negative after a compaction. |
 | `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest |
 
-When the terminal is narrow, the meta row drops parts in this order: the tool count, the trail, the token count. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. Under 12 cells it draws nothing.
+When the terminal is narrow, the meta row drops parts in this order: the tool count, then the trail. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. Under 12 cells it draws nothing.
 
 The mod only follows the main conversation. Subagent thinking and turns are ignored. It makes no model calls, network requests or file writes.
 
@@ -123,7 +122,7 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 
 ## How it works
 
-- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, block and tool counts, and output tokens. When a step ends, its tool calls' arguments add to the focus counts.
+- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, and block and tool counts. When a step ends, its tool calls' arguments add to the focus counts.
 - A `ui.render` hook on `Spinner` notes the spinner's mode and draws the spinner unchanged. Render hooks can't write state, so the ticker applies the noted mode as a phase, up to a second late.
 - A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.

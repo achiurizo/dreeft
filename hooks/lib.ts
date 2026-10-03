@@ -7,7 +7,7 @@ export type Tone = 'faint' | 'dim' | 'bright' | 'warn' | 'think' | 'tool'
 /** A run of text in one tone; a row is a list of these. */
 export type Seg = { text: string; tone: Tone }
 /** The turn figures the meta row shows; `thinkMs` in milliseconds. */
-export type Meta = { thinkMs: number; blocks: number; tools: number; outTok: number }
+export type Meta = { thinkMs: number; blocks: number; tools: number }
 
 const width = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
 
@@ -173,7 +173,6 @@ export function newTurn(started: number, startTokens: number | null, window: num
   return {
     blocks: 0,
     tools: 0,
-    outTok: 0,
     startTokens,
     window,
     done: false,
@@ -223,7 +222,7 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
     case 'tool':
       return { ...enterPhase(flush(t), 'tool', now), tools: t.tools + 1, lastChunk: 'tool' }
     case 'stop':
-      return { ...t, now, outTok: t.outTok + (chunk.usage?.output_tokens ?? 0), lastChunk: 'stop' }
+      return { ...t, now, lastChunk: 'stop' }
     default:
       return t
   }
@@ -320,13 +319,6 @@ export function growthTrail(history: number[], current: number | null, cells: nu
   return { past: dots(levels.slice(0, -2)), now: dots(levels.slice(-2)) }
 }
 
-/** A token count as `950`, `1.8k` or `42k`. */
-export function formatTokens(n: number): string {
-  if (n < 1000) return String(n)
-  if (n < 10000) return (n / 1000).toFixed(1) + 'k'
-  return Math.round(n / 1000) + 'k'
-}
-
 /** Growth in points of the window, always signed, one decimal under 10: `+0.6%`, `-12%`; never `-0.0%`. */
 export function formatGrowth(points: number): string {
   const abs = Math.abs(points)
@@ -335,16 +327,15 @@ export function formatGrowth(points: number): string {
 }
 
 /**
- * Meta row, fitted to `max` cells: drop the tool count, the trail, the token count, then the whole row.
+ * Meta row, fitted to `max` cells: drop the tool count, the trail, then the whole row.
  * @param growth - this turn's growth in points of the window, or null when unmeasured
  * @param history - earlier turns' growth in points, oldest first
  */
 export function metaRow(meta: Meta, growth: number | null, history: number[], max: number): Seg[] {
   const head = `◆ ${formatSecs(meta.thinkMs)} · ${meta.blocks} blk`
   const tools = ` · ${meta.tools} ${meta.tools === 1 ? 'tool' : 'tools'}`
-  const out = ` · ${formatTokens(meta.outTok)} out`
   if (growth === null) {
-    const plain = [head + tools + out, head + out, head].map(text => [{ text, tone: 'dim' as Tone }])
+    const plain = [head + tools, head].map(text => [{ text, tone: 'dim' as Tone }])
     return plain.find(c => width(c) <= max) ?? []
   }
   const tone: Tone = growth >= 10 ? 'warn' : 'bright'
@@ -352,9 +343,8 @@ export function metaRow(meta: Meta, growth: number | null, history: number[], ma
   const trail = growthTrail(history, growth, TRAIL_CELLS)
   const t: Seg[] = [{ text: ' ' + trail.past, tone: 'dim' }, { text: trail.now, tone }]
   const candidates: Seg[][] = [
-    [{ text: head + tools + out, tone: 'dim' }, ...g, ...t],
-    [{ text: head + out, tone: 'dim' }, ...g, ...t],
-    [{ text: head + out, tone: 'dim' }, ...g],
+    [{ text: head + tools, tone: 'dim' }, ...g, ...t],
+    [{ text: head, tone: 'dim' }, ...g, ...t],
     [{ text: head, tone: 'dim' }, ...g],
   ]
   return candidates.find(c => width(c) <= max) ?? []

@@ -21,8 +21,6 @@ export type TurnMeta = {
   blocks: number
   /** Tool calls so far. */
   tools: number
-  /** Output tokens across the turn's steps, thinking included. */
-  outTok: number
   /** Context tokens at step 0, or null when nothing had been measured. */
   startTokens: number | null
   /** The context window at step 0, in tokens, or 0 when unknown. */
