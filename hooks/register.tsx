@@ -4,6 +4,8 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 import type { Ctx, Phase, TurnMeta } from '../types'
 import { addTerms, enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, toolTerms, topTerms } from './lib'
 import type { Seg } from './lib'
+import { JUDGE_SYSTEM, buildRecords, createShadow, failed, judgePrompt, parseVerdicts, selectCandidates } from './shadow'
+import type { JudgeMeta, ShadowTurn } from './shadow'
 
 /** How often the ticker advances a running turn, in milliseconds. */
 const TICK_MS = 1000
@@ -61,6 +63,66 @@ function startTicker($: EngineInterface) {
   })
 }
 
+// Memory shadow mode (experimental): judge a turn's candidate facts and append them to a log.
+// Never writes memory, never stages, never changes the turn.
+
+/** The cheapest model the judge may use. */
+const JUDGE_MODEL = 'claude-haiku-4-5-20251001'
+/** The log, under `$HOME`. */
+const LOG_DIR = '.local/state/whispered-thoughts'
+const LOG_FILE = 'memory-shadow.jsonl'
+
+/** The project's name and its main checkout, found once per load. */
+let where: Promise<{ project: string; root: string }> | undefined
+
+async function locate($: EngineInterface): Promise<{ project: string; root: string }> {
+  const cwd = await $.session.cwd()
+  const git = async (...args: string[]) => {
+    const r = await $.process.run(['git', '-C', cwd, ...args], { timeoutMs: 5000 }).catch(() => null)
+    return r && r.exitCode === 0 ? r.stdout.trim() : ''
+  }
+  const common = await git('rev-parse', '--path-format=absolute', '--git-common-dir')
+  const root = common.endsWith('/.git') ? common.slice(0, -'/.git'.length) : (await git('rev-parse', '--show-toplevel')) || cwd
+  const remote = await git('remote', 'get-url', 'origin')
+  // A remote may carry credentials; keep host and path only.
+  const project = remote.replace(/^[a-z+]+:\/\/[^@/]*@/i, 'https://') || root.split('/').filter(Boolean).at(-1) || cwd
+  return { project, root }
+}
+
+/** Appends lines to the log with `>>`, so concurrent sessions never drop each other's records. */
+async function append($: EngineInterface, lines: string): Promise<void> {
+  const home = await $.env.get('HOME')
+  if (!home) return
+  const dir = `${home}/${LOG_DIR}`
+  await $.process.run(['/bin/sh', '-c', 'mkdir -p "$1" && cat >> "$1/$2"', 'sh', dir, LOG_FILE], { stdin: lines, timeoutMs: 5000 })
+}
+
+/** Judge one finished turn and log every candidate; nothing at all when it has none. */
+async function judgeTurn($: EngineInterface, done: ShadowTurn): Promise<void> {
+  const candidates = selectCandidates(done)
+  if (candidates.length === 0) return
+  where ??= locate($)
+  const [{ project, root }, session, now] = await Promise.all([where, $.session.id(), $.clock.now()])
+  const reply = await $.model.complete({
+    model: JUDGE_MODEL,
+    system: JUDGE_SYSTEM,
+    prompt: judgePrompt(project, candidates),
+    maxTokens: 200 * candidates.length + 100,
+    timeoutMs: 30_000,
+  })
+  const judge: JudgeMeta = {
+    model: JUDGE_MODEL,
+    candidates: candidates.length,
+    input_tokens: reply.usage.input_tokens + reply.usage.cache_read_input_tokens + reply.usage.cache_creation_input_tokens,
+    output_tokens: reply.usage.output_tokens,
+  }
+  const verdicts = reply.isAnswered
+    ? parseVerdicts(reply.text, candidates.length)
+    : candidates.map(() => failed(`judge call failed: ${reply.reason}`))
+  const records = buildRecords({ ts: new Date(now).toISOString(), session, turn: done.turnId, project, root }, candidates, verdicts, judge)
+  await append($, records.map(r => `${JSON.stringify(r)}\n`).join(''))
+}
+
 /** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
 type Ink = { color?: string; dimColor?: boolean }
 /** Timeline palettes, keyed by the `palette` setting; unknown values fall back to `mono`. */
@@ -72,9 +134,19 @@ const PALETTES = {
 } satisfies Record<string, { think: Ink; tool: Ink }>
 const isPalette = (name: unknown): name is keyof typeof PALETTES => typeof name === 'string' && Object.hasOwn(PALETTES, name)
 
-/** Registers the mod's hooks; `options.palette` picks the timeline palette. */
+/** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass. */
 export const register: Register = (on, options) => {
   const palette: { think: Ink; tool: Ink } = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
+  const shadow = options.memoryShadow === 'on' ? createShadow() : null
+
+  // Only the shadow pass reads tool results.
+  if (shadow) {
+    on('tool.call', async (_$, e, next) => {
+      const result = await next(e)
+      if (e.agentId === undefined) shadow.tool(e, result)
+      return result
+    })
+  }
 
   on('session.start', async ($, e, next) => {
     // A reload drops the module's ticker; pick it back up if a turn is still running.
@@ -97,19 +169,22 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) {
-      stopTicker()
-      spinnerPhase = null
-      await safely(async () => {
-        const t = await read($, turn)
-        if (!t || t.done) return
-        const now = await $.clock.now()
-        const g = growthOf(t, await read($, ctx))
-        if (g !== null) await update($, trail, past => [...past, g].slice(-TRAIL_MAX))
-        await update($, turn, x => x && { ...x, done: true, final: g, now })
-      })
-    }
-    return next(e)
+    if (e.agentId !== undefined) return next(e)
+    stopTicker()
+    spinnerPhase = null
+    await safely(async () => {
+      const t = await read($, turn)
+      if (!t || t.done) return
+      const now = await $.clock.now()
+      const g = growthOf(t, await read($, ctx))
+      if (g !== null) await update($, trail, past => [...past, g].slice(-TRAIL_MAX))
+      await update($, turn, x => x && { ...x, done: true, final: g, now })
+    })
+    const result = await next(e)
+    const judged = shadow?.complete(e)
+    // Unawaited, after the turn settled: the judge never delays or changes the turn.
+    if (judged) void judgeTurn($, judged).catch(err => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' }))
+    return result
   })
 
   on('session.compact', async ($, e, next) => {
@@ -123,6 +198,7 @@ export const register: Register = (on, options) => {
 
   on('turn.step', async function* ($, e, next) {
     if (e.agentId !== undefined) return yield* next(e)
+    shadow?.step(e)
 
     if (e.index === 0) {
       // Nothing measured since load: seed from the status line's figures, apart so a failure here
@@ -160,6 +236,7 @@ export const register: Register = (on, options) => {
         return step.value
       }
       const chunk = step.value
+      shadow?.chunk(e.turnId, chunk)
       await safely(async () => {
         const now = await $.clock.now()
         await update($, turn, t => t && reduceChunk(t, chunk, now))

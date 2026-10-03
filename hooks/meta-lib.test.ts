@@ -55,7 +55,7 @@ describe('growthTrail', () => {
     expect(flat(growthTrail([null, 1, 1, 1, 1], 1, 2)).past.includes('↓')).toBe(false)
   })
   test('the meta row shows the mark in amber', () => {
-    const row = metaRow({ thinkMs: 0, blocks: 1, tools: 0, outTok: 0 }, 1, [1, null], 80)
+    const row = metaRow({ thinkMs: 0, blocks: 1, tools: 0 }, 1, [1, null], 80)
     expect(row).toContainEqual({ text: '↓', tone: 'warn' })
   })
 })

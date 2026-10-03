@@ -1,6 +1,6 @@
 {
   "name": "whispered-thoughts",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Band above the prompt showing what the session's thinking is doing: focus, a turn timeline, and turn cost",
   "author": {
     "name": "Arthur Chiu",
@@ -28,6 +28,16 @@
         "amber",
         "blue",
         "magenta"
+      ]
+    },
+    "memoryShadow": {
+      "type": "string",
+      "title": "Memory shadow log (experimental)",
+      "description": "on: after each main-loop turn, pick candidate facts from the thinking, judge them with Haiku (one call per turn with candidates) and append the verdicts to ~/.local/state/whispered-thoughts/memory-shadow.jsonl. Never writes memory.",
+      "default": "off",
+      "options": [
+        "off",
+        "on"
       ]
     }
   }

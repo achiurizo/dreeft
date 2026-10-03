@@ -55,7 +55,7 @@ Phases come from two sources: the model's chunks, and the mode of Claude Code's 
 
 When the terminal is narrow, the meta row drops parts in this order: the tool count, then the trail. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. Under 12 cells it draws nothing.
 
-The mod only follows the main conversation. Subagent thinking and turns are ignored. It makes no model calls, network requests or file writes.
+The mod only follows the main conversation. Subagent thinking and turns are ignored. It makes no model calls, network requests or file writes, unless you turn on the experimental [memory shadow log](#memory-shadow-log-experimental).
 
 ## Requirements
 
@@ -109,6 +109,7 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
 | Setting | Default | Effect |
 | --- | --- | --- |
 | `palette` | `mono` | Timeline colors. `mono` uses brightness only (thinking plain, tools dim). `amber` and `blue` color thinking and keep tools dim. `magenta` colors thinking magenta and tools cyan. |
+| `memoryShadow` | `off` | `on` turns on the experimental memory shadow log. See below. |
 
 Change it with `/config`, or in `~/.claude/settings.json`:
 
@@ -118,6 +119,25 @@ Change it with `/config`, or in `~/.claude/settings.json`:
     "whispered-thoughts": { "options": { "palette": "amber" } }
   }
 }
+```
+
+## Memory shadow log (experimental)
+
+A spike that measures whether the session's thinking holds durable facts worth keeping as memories. It only logs. It never writes to a memory store, never stages memory candidates, and never changes the turn. The band shows nothing new.
+
+With `memoryShadow` set to `on`, after each main-loop turn that was not interrupted:
+
+1. Candidates come from the turn's thinking (thinking summaries must be on):
+   - **hedge**: the sentence after a "wait", "actually" or "hmm" that states something, not a plan or a question.
+   - **focus**: a name the turn came back to at least twice, with the thinking sentences that mention it.
+2. Each candidate gets outcome evidence from the same turn: the last successful tool result that names it, else the sentence of the answer that names it. A candidate with no evidence is still logged, with `confirmed: false`.
+3. One Haiku 4.5 call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
+4. One JSON line per candidate is appended to `~/.local/state/whispered-thoughts/memory-shadow.jsonl`: time, session, turn, project, candidate source, span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`), and for a keep the fact, memory type and name, topic, keywords and importance. Each line also records the judge call's token usage.
+
+Read the kept facts:
+
+```sh
+jq -c 'select(.verdict == "keep") | {confirmed, importance, topic, fact}' ~/.local/state/whispered-thoughts/memory-shadow.jsonl
 ```
 
 ## How it works
@@ -133,6 +153,7 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 | --- | --- |
 | `hooks/register.tsx` | Hooks, state atoms, render |
 | `hooks/lib.ts` | Pure helpers: focus scan, phase timeline, chunk reducer, row layout, braille trail |
+| `hooks/shadow.ts` | Memory shadow log: turn buffer, candidate selection, judge prompt and parsing, log records |
 | `types/index.d.ts` | Shape of the mod's session state |
 | `hooks/*.test.ts` | Tests, run with the `claude-code/testing` kit |
 
