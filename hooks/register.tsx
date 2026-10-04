@@ -3,7 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Ctx, Phase, TurnMeta } from '../types'
 import { addTerms, enterPhase, focusRow, inputTokens, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, toolTerms, topTerms } from './lib'
-import type { Seg } from './lib'
+import type { Seg, Tone } from './lib'
 import { JUDGE_SYSTEM, buildRecords, createShadow, failed, judgePrompt, parseVerdicts, selectCandidates } from './shadow'
 import type { JudgeMeta, ShadowTurn } from './shadow'
 
@@ -127,8 +127,9 @@ async function judgeTurn($: EngineInterface, done: ShadowTurn): Promise<void> {
   await append($, records.map(r => `${JSON.stringify(r)}\n`).join(''))
 }
 
-/** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
+/** How a run of text is drawn. */
 type Ink = { color?: string; dimColor?: boolean }
+/** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
 type Palette = { think: Ink; tool: Ink }
 /** Timeline palettes, keyed by the `palette` setting; unknown values fall back to `mono`. */
 const PALETTES = {
@@ -142,6 +143,7 @@ const isPalette = (name: unknown): name is keyof typeof PALETTES => typeof name 
 /** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass. */
 export const register: Register = (on, options) => {
   const palette: Palette = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
+  const ink: Record<Tone, Ink> = { faint: { color: 'gray', dimColor: true }, dim: { dimColor: true }, bright: {}, warn: { color: 'yellow' }, ...palette }
   const shadow = options.memoryShadow === 'on' ? createShadow() : null
 
   // Only the shadow pass reads tool results.
@@ -289,22 +291,7 @@ export const register: Register = (on, options) => {
       .filter(row => row.some(seg => seg.text.trim() !== ''))
 
     const { Box, Text } = $.ui.resolve(e)
-    const seg = (part: Seg) =>
-      part.tone === 'faint' ? (
-        <Text color="gray" dimColor>
-          {part.text}
-        </Text>
-      ) : part.tone === 'dim' ? (
-        <Text dimColor>{part.text}</Text>
-      ) : part.tone === 'warn' ? (
-        <Text color="yellow">{part.text}</Text>
-      ) : part.tone === 'think' ? (
-        <Text {...palette.think}>{part.text}</Text>
-      ) : part.tone === 'tool' ? (
-        <Text {...palette.tool}>{part.text}</Text>
-      ) : (
-        <Text>{part.text}</Text>
-      )
+    const seg = (part: Seg) => <Text {...ink[part.tone]}>{part.text}</Text>
 
     return (
       <Box flexDirection="column" alignItems="flex-end">
