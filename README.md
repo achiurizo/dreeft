@@ -149,15 +149,15 @@ A spike that measures whether the session's thinking holds durable facts worth k
 <details>
 <summary>What it logs, and how to read it</summary>
 
-With `memoryShadow` set to `on`, after each main-loop turn that was not interrupted:
+With `memoryShadow` set to `on`, the mod does three things it never does otherwise. It sends quoted thinking, quoted tool output and the repo's `origin` URL to the model provider, on your account. It runs `git` to find the repo and `sh` to append to the log. It writes the log file. After each main-loop turn that was not interrupted:
 
 1. Candidates come from the turn's thinking (thinking summaries must be on):
    - **hedge**: the sentence after a "wait", "actually" or "hmm" that states something, not a plan or a question.
    - **focus**: a name the turn came back to at least twice, with the thinking sentences that mention it.
 2. Each candidate gets outcome evidence from the same turn: the last successful tool result that names it, else the sentence of the answer that names it. A candidate with no evidence is still logged, with `confirmed: false`.
 3. One Haiku call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
-4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`: time, session, turn, project, candidate source, span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`), and for a keep the fact, memory type and name, topic, keywords and importance. Each line also records the judge call's token usage.
-5. Spans and evidence quote your session, so anything shaped like a credential (a `SECRET=` or `token:` value, a URL password, a known key prefix) is replaced with `[redacted]` before the judge call and the log. The match is by pattern and can miss a secret in an unusual shape. The log directory is created owner-only (`700`).
+4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`: time, session, turn, project (the `origin` URL, credentials stripped), `root` (the absolute path of the repo's main checkout), candidate source, `term` (the repeated name, for a focus candidate), span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`) and the judge's one-line `reason`, and for a keep the fact, keywords and importance, plus the memory type, name and topic a memory store could file the fact under. Each line also records the judge call's token usage.
+5. Spans and evidence quote your session, so anything shaped like a credential (a `SECRET=` or `token:` value, a URL password, a known key prefix) is replaced with `[redacted]` before the judge call and the log, and a repeated name that is itself shaped like a credential is not a candidate. The match is by pattern and can miss a secret in an unusual shape. The log directory is created owner-only (`700`).
 6. A name or span already judged in the session is not judged again.
 
 Read the kept facts:
@@ -204,11 +204,12 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 claude plugin test .                                           # run the tests
 claude plugin validate --strict .claude-plugin/plugin.json     # check manifest, hooks and declared state
 claude plugin validate --strict .claude-plugin/marketplace.json
+claude -p x --plugin-dir . || true                             # write .claude-plugin/types (no login needed)
 npx -p typescript@7.0.2 tsc -p .                               # type-check
 bun scripts/readme-images.ts                                   # redraw the README images
 ```
 
-Type-checking needs `.claude-plugin/types/`. Claude Code writes that folder each time a session loads the mod from a local folder, such as with `--plugin-dir`. The folder is gitignored, so a fresh clone can't type-check until you start Claude Code once with `claude --plugin-dir .`. A marketplace install does not write it.
+Type-checking needs `.claude-plugin/types/`. Claude Code writes that folder each time a session loads the mod from a local folder, such as with `--plugin-dir`. The folder is gitignored, so a fresh clone can't type-check until a session has loaded the mod once. The `claude -p x --plugin-dir .` line does that: Claude Code writes the folder before the login check, so the command fails with no login and still leaves the types behind. A marketplace install does not write the folder.
 
 CI runs all of these on every pull request, and fails when redrawing the images changes anything in `assets/`.
 

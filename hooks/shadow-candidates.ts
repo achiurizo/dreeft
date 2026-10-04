@@ -33,8 +33,8 @@ const squash = (s: string) => s.replace(/\s+/g, ' ').trim()
 /** Secret shapes a tool result or a thought can carry; the log and the judge never see them. */
 const SECRETS: [RegExp, string][] = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[redacted]'],
-  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+(?::[^\s/]*)?@/gi, '$1[redacted]@'],
-  [/\b([\w.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]'],
+  [/(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+(?::[^\s/]*)?@/gi, '$1[redacted]@'],
+  [/(?<![\w.-])([\w.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]'],
   [/\b((?:bearer|basic)\s+)[\w.~+/=-]{8,}/gi, '$1[redacted]'],
   [/\b(?:sk|pk|rk)[-_](?:live|test|ant|proj)[-_][\w-]{8,}|\bsk-[\w-]{20,}|\bgh[pousr]_\w{20,}|\bgithub_pat_\w{20,}|\bxox[abprs]-[\w-]{10,}|\bAKIA[0-9A-Z]{16}\b|\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/g, '[redacted]'],
 ]
@@ -42,14 +42,24 @@ const SECRETS: [RegExp, string][] = [
 /** `text` with anything shaped like a credential replaced by `[redacted]`. */
 export const redact = (text: string) => SECRETS.reduce((s, [re, to]) => s.replace(re, to), text)
 
+/** How much of one sentence is redacted: the clip to `SPAN_MAX` or `SNIPPET_MAX` follows anyway. */
+const REDACT_WINDOW = SPAN_MAX * 4
+
+/** Where a sentence ends: closing punctuation before a space or the end, or a newline. */
+const SENTENCE_END = /(?<![.!?])[.!?]+(?=\s|$)|\n+/g
+
 /** Sentences of `text`, each with its start offset; a newline also ends one, a dot inside `foo.ts` or `../a` does not. */
 function sentences(text: string): { at: number; s: string }[] {
   const out: { at: number; s: string }[] = []
-  const re = /(?:[^.!?\n]|[.!?]+(?=[^\s.!?]))+(?:[.!?]+(?=\s|$)|\n+|$)/g
-  for (const m of text.matchAll(re)) {
-    const s = m[0].trim()
-    if (s !== '') out.push({ at: m.index + m[0].length - m[0].trimStart().length, s })
+  let from = 0
+  const cut = (to: number) => {
+    const raw = text.slice(from, to)
+    // Punctuation alone says nothing.
+    if (/[^\s.!?]/.test(raw)) out.push({ at: from + raw.length - raw.trimStart().length, s: raw.trim() })
+    from = to
   }
+  for (const m of text.matchAll(SENTENCE_END)) cut(m.index + m[0].length)
+  cut(text.length)
   return out
 }
 
@@ -114,13 +124,13 @@ export function findEvidence(turn: ShadowTurn, terms: string[]): Evidence | null
     return { from: 'tool', tool: u.name, snippet: around(text, text.includes(hit) ? hit : null) }
   }
   const said = sentences(turn.text).find(p => terms.some(t => p.s.includes(t)))
-  return said ? { from: 'text', snippet: clip(squash(redact(said.s)), SNIPPET_MAX) } : null
+  return said ? { from: 'text', snippet: clip(squash(redact(said.s.slice(0, REDACT_WINDOW))), SNIPPET_MAX) } : null
 }
 
 /** The sentences that name `term`, the last two joined, clipped to `SPAN_MAX`. */
 function mentions(thought: { s: string }[], term: string): string {
   const hits = thought.filter(p => p.s.includes(term)).slice(-2)
-  return clip(squash(redact(hits.map(p => p.s).join(' … '))), SPAN_MAX)
+  return clip(squash(redact(hits.map(p => p.s.slice(0, REDACT_WINDOW)).join(' … '))), SPAN_MAX)
 }
 
 /**
@@ -134,6 +144,7 @@ export function selectCandidates(turn: ShadowTurn): Candidate[] {
   const thought = sentences(turn.thinking)
   for (const { t } of repeatedTerms(turn)) {
     if (focus.length >= FOCUS_CANDIDATES) break
+    if (redact(t) !== t) continue // the name itself is a credential: never logged, never judged
     const span = mentions(thought, t)
     if (span === '') continue // only tool calls named it: no belief to judge
     if (hedges.some(h => h.span.includes(span))) continue

@@ -120,6 +120,23 @@ describe('selectCandidates', () => {
     const got = selectCandidates(turnOf({ thinking: `${hedges} Fine. ${names}` }))
     expect(got.map(c => c.source)).toEqual(['hedge', 'hedge', 'hedge', 'hedge', 'focus', 'focus'])
   })
+  test('a name shaped like a secret is not a focus candidate', () => {
+    const pat = 'ghp_0123456789abcdefghijABCDEFGHIJ'
+    const got = selectCandidates(turnOf({ thinking: `The push used \`${pat}\` first. Then the remote rejected \`${pat}\` as expired.` }))
+    expect(JSON.stringify(got)).not.toContain(pat)
+    expect(got.filter(c => c.source === 'focus')).toEqual([])
+  })
+  test('a punctuation run or one unbroken long sentence costs about what prose does', () => {
+    const elapsed = (turn: ShadowTurn) => {
+      const from = performance.now()
+      selectCandidates(turn)
+      return performance.now() - from
+    }
+    const dots = '.'.repeat(200_000)
+    expect(elapsed(turnOf({ thinking: dots, text: dots }))).toBeLessThan(1000)
+    const unbroken = `\`trailOf\` ${'token.'.repeat(3000)} \`trailOf\``
+    expect(elapsed(turnOf({ thinking: unbroken, text: unbroken }))).toBeLessThan(1000)
+  })
   test('a name only tool calls repeated is not a candidate', () => {
     expect(selectCandidates(turnOf({ tools: [tool({ terms: ['a.ts'] }), tool({ terms: ['a.ts'] })] }))).toEqual([])
   })
