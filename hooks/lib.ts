@@ -17,11 +17,17 @@ export function formatSecs(ms: number): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60}s`
 }
 
+/** A response's input side: fresh tokens plus what the cache read and wrote. */
+export function inputTokens(u: { input_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }): number {
+  return u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+}
+
 // Focus: the names the thinking mentions, found without a model call.
 
 const CARRY_MAX = 200
 const FOCUS_MAX = 50
-const HEDGE = /\b(wait|actually|hmm+)\b/gi
+/** A second-guess marker in thinking text. */
+export const HEDGE = /\b(wait|actually|hmm+)\b/gi
 const TOKEN = /`([^`\n]+)`|[A-Za-z_][\w./-]*\w/g
 const FILE = /\.(tsx?|jsx?|mjs|cjs|json|md|py|rb|go|rs|sh|fish|toml|ya?ml|css|html)$/i
 

@@ -3,7 +3,7 @@
 
 import type { ToolCallInput, ToolCallResult, TurnCompleteInput, TurnStepChunk, TurnStepInput } from 'claude-code'
 
-import { scanThought, toolTerms } from './lib'
+import { HEDGE, scanThought, toolTerms } from './lib'
 
 /** What one main-loop turn left behind for the shadow pass. */
 export type ShadowTurn = {
@@ -88,7 +88,6 @@ function sentences(text: string): { at: number; s: string }[] {
   return out
 }
 
-const HEDGE = /\b(wait|actually|hmm+)\b/gi
 /** After the marker, a plan or a question is not a corrected belief. */
 const PLAN = /^[\s,.:;!-]*(let me|let's|i'll|i will|i need|i should|i want|i'm going|now|ok(ay)?\b|so\b)/i
 

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Ctx, Phase, TurnMeta } from '../types'
-import { addTerms, enterPhase, focusRow, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, toolTerms, topTerms } from './lib'
+import { addTerms, enterPhase, focusRow, inputTokens, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, toolTerms, topTerms } from './lib'
 import type { Seg } from './lib'
 import { JUDGE_SYSTEM, buildRecords, createShadow, failed, judgePrompt, parseVerdicts, selectCandidates } from './shadow'
 import type { JudgeMeta, ShadowTurn } from './shadow'
@@ -28,6 +28,8 @@ const turn = atom({ plugin: 'dreeft', key: 'turn' } as const, null as TurnMeta |
 const trail = atom({ plugin: 'dreeft', key: 'trail' } as const, [] as (number | null)[])
 /** Turns of growth the trail keeps. */
 const TRAIL_MAX = 20
+/** Add one entry to the trail, a turn's growth or a compaction's null, dropping the oldest past `TRAIL_MAX`. */
+const pushTrail = ($: EngineInterface, entry: number | null) => update($, trail, past => [...past, entry].slice(-TRAIL_MAX))
 
 /** Context growth since the turn's step 0, in percentage points of the window. */
 function growthOf(t: TurnMeta | null, c: Ctx | null): number | null {
@@ -72,10 +74,12 @@ const JUDGE_MODEL = 'claude-haiku-4-5-20251001'
 const LOG_DIR = '.local/state/dreeft'
 const LOG_FILE = 'memory-shadow.jsonl'
 
-/** The project's name and its main checkout, found once per load. */
-let where: Promise<{ project: string; root: string }> | undefined
+/** The project's name and its main checkout. */
+type Where = { project: string; root: string }
+/** Found once per load. */
+let where: Promise<Where> | undefined
 
-async function locate($: EngineInterface): Promise<{ project: string; root: string }> {
+async function locate($: EngineInterface): Promise<Where> {
   const cwd = await $.session.cwd()
   const git = async (...args: string[]) => {
     const r = await $.process.run(['git', '-C', cwd, ...args], { timeoutMs: 5000 }).catch(() => null)
@@ -113,7 +117,7 @@ async function judgeTurn($: EngineInterface, done: ShadowTurn): Promise<void> {
   const judge: JudgeMeta = {
     model: JUDGE_MODEL,
     candidates: candidates.length,
-    input_tokens: reply.usage.input_tokens + reply.usage.cache_read_input_tokens + reply.usage.cache_creation_input_tokens,
+    input_tokens: inputTokens(reply.usage),
     output_tokens: reply.usage.output_tokens,
   }
   const verdicts = reply.isAnswered
@@ -125,18 +129,19 @@ async function judgeTurn($: EngineInterface, done: ShadowTurn): Promise<void> {
 
 /** How the timeline's thinking and tool cells are drawn; writing is always plain, waiting blank. */
 type Ink = { color?: string; dimColor?: boolean }
+type Palette = { think: Ink; tool: Ink }
 /** Timeline palettes, keyed by the `palette` setting; unknown values fall back to `mono`. */
 const PALETTES = {
   mono: { think: {}, tool: { dimColor: true } },
   amber: { think: { color: 'yellow' }, tool: { dimColor: true } },
   blue: { think: { color: 'blue' }, tool: { dimColor: true } },
   magenta: { think: { color: 'magenta' }, tool: { color: 'cyan' } },
-} satisfies Record<string, { think: Ink; tool: Ink }>
+} satisfies Record<string, Palette>
 const isPalette = (name: unknown): name is keyof typeof PALETTES => typeof name === 'string' && Object.hasOwn(PALETTES, name)
 
 /** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass. */
 export const register: Register = (on, options) => {
-  const palette: { think: Ink; tool: Ink } = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
+  const palette: Palette = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
   const shadow = options.memoryShadow === 'on' ? createShadow() : null
 
   // Only the shadow pass reads tool results.
@@ -177,7 +182,7 @@ export const register: Register = (on, options) => {
       if (!t || t.done) return
       const now = await $.clock.now()
       const g = growthOf(t, await read($, ctx))
-      if (g !== null) await update($, trail, past => [...past, g].slice(-TRAIL_MAX))
+      if (g !== null) await pushTrail($, g)
       await update($, turn, x => x && { ...x, done: true, final: g, now })
     })
     const result = await next(e)
@@ -191,7 +196,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     // A precompute installs nothing, and a skip leaves the conversation as it was.
     if (e.agentId === undefined && e.trigger !== 'precompute' && result.messages !== undefined) {
-      await safely(() => update($, trail, past => [...past, null].slice(-TRAIL_MAX)))
+      await safely(() => pushTrail($, null))
     }
     return result
   })
@@ -241,9 +246,9 @@ export const register: Register = (on, options) => {
         const now = await $.clock.now()
         await update($, turn, t => t && reduceChunk(t, chunk, now))
         if (chunk.kind === 'stop' && chunk.usage) {
-          const u = chunk.usage
-          const input = u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
-          await update($, ctx, c => c && { ...c, tokens: input + u.output_tokens, lastInput: input })
+          const input = inputTokens(chunk.usage)
+          const tokens = input + chunk.usage.output_tokens
+          await update($, ctx, c => c && { ...c, tokens, lastInput: input })
         }
       })
       yield chunk
