@@ -79,7 +79,7 @@ test('a name split across chunks still counts toward focus', WITH_PROBE, async (
   mock.clock(on)
   beneath(on, [
     { kind: 'thinking', index: 0, text: 'look at `meta' },
-    { kind: 'thinking', index: 0, text: 'Row` now, actually ' },
+    { kind: 'thinking', index: 0, text: 'Row` now. Actually, ' },
   ])
   await drain($.turn.step(STEP))
   expect(await probe($)).toMatchObject({ focus: [{ t: 'metaRow', n: 1 }], hedges: 1 })

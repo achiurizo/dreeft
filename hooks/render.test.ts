@@ -55,7 +55,7 @@ test('nothing before any turn', async ($, on) => {
 test('while thinking: focus row, timeline row, meta row', async ($, on) => {
   mock.clock(on)
   engineBand(on)
-  const step = await thinking($, on, 'check `metaRow` then `metaRow` again, wait ')
+  const step = await thinking($, on, 'check `metaRow` then `metaRow` again. Wait, ')
   const view = await mount($)
   const text = await joined(view)
   expect(text).toContain('∴ metaRow ×2')

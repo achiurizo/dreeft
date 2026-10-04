@@ -8,8 +8,36 @@ describe('scanThought', () => {
     expect(r.terms).toEqual(['observe', 'register.tsx', 'metaRow', 'turn_step'])
   })
 
-  test('counts second-guesses: wait, actually, hmm', () => {
-    expect(scanThought('', 'Wait, that is wrong. Actually no. Hmm, maybe. Waiting is fine. ').hedges).toBe(3)
+  test('counts a sentence that opens with an interjection', () => {
+    expect(scanThought('', 'Wait, that is wrong. It reads the cache. Actually, no. Hmm, maybe.\nOh, it is the other file. ').hedges).toBe(4)
+  })
+
+  test('counts a narrated realization', () => {
+    const text = 'I realize the tests came second. It turns out the pane id is qualified. On closer inspection it never advanced. I need to reconsider the denylist. I\'m realizing the engine forbids it. '
+    expect(scanThought('', text).hedges).toBe(5)
+  })
+
+  test('the same words as verb or adverb are not second-guesses', () => {
+    const text = 'I will wait for CI before merging. Check how the path logic actually works. The run was actually green. There is no, as far as I can tell, helper. Waiting is fine. '
+    expect(scanThought('', text).hedges).toBe(0)
+  })
+
+  test('a second-guess split across pieces counts once', () => {
+    const a = scanThought('', 'The offset is fine. I ')
+    const b = scanThought(a.carry, 'realize it is not. Actually', a.tail)
+    const c = scanThought(b.carry, ', the mark is stale. ', b.tail)
+    expect([a.hedges, b.hedges, c.hedges]).toEqual([0, 1, 1])
+  })
+
+  test('a piece that starts mid-sentence is not a sentence opening', () => {
+    const a = scanThought('', 'The reviewer had, ')
+    expect(scanThought(a.carry, 'actually, already answered. ', a.tail).hedges).toBe(0)
+  })
+
+  test('a counted second-guess is not counted again from the tail', () => {
+    const a = scanThought('', 'Wait, that is wrong. ')
+    expect(a.hedges).toBe(1)
+    expect(scanThought(a.carry, 'So the mark stays. ', a.tail).hedges).toBe(0)
   })
 
   test('holds back a trailing partial word or open backtick for the next piece', () => {
@@ -26,7 +54,7 @@ describe('scanThought', () => {
   })
 
   test('held text that outgrows the carry is scanned as prose, not lost', () => {
-    const r = scanThought('', `a stray \` then ${'plain words '.repeat(20)}and wait for metaRow here`)
+    const r = scanThought('', `a stray \` then ${'plain words '.repeat(20)}and it turns out metaRow here`)
     expect(r.terms).toEqual(['metaRow'])
     expect(r.hedges).toBe(1)
   })

@@ -75,6 +75,7 @@ export function newTurn(started: number, startTokens: number | null, window: num
     focus: [],
     hedges: 0,
     carry: '',
+    tail: '',
     lastChunk: null,
   }
 }
@@ -100,9 +101,10 @@ export function enterPhase(t: TurnMeta, phase: Phase, now: number): TurnMeta {
 
 /** A block's last word has no space after it: scan it once the block ends. */
 function flush(t: TurnMeta): TurnMeta {
-  if (t.carry === '') return t
-  const scan = scanThought(t.carry, ' ')
-  return { ...t, focus: addTerms(t.focus, scan.terms), hedges: t.hedges + scan.hedges, carry: '' }
+  // The next block opens a new sentence: its first word has no left context to inherit.
+  if (t.carry === '') return t.tail === '' ? t : { ...t, tail: '' }
+  const scan = scanThought(t.carry, ' ', t.tail)
+  return { ...t, focus: addTerms(t.focus, scan.terms), hedges: t.hedges + scan.hedges, carry: '', tail: '' }
 }
 
 /** The chunk kinds `reduceChunk` folds; any other kind leaves the turn as it was. */
@@ -115,13 +117,14 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
       // Text may be empty (thinking summaries off): it is still thinking time, with nothing to scan.
       // A block starts at the first thinking chunk after anything else; the spinner may have opened the span already.
       const fresh = t.lastChunk !== 'thinking'
-      const scan = scanThought(t.carry, chunk.text)
+      const scan = scanThought(t.carry, chunk.text, t.tail)
       return {
         ...enterPhase(t, 'think', now),
         blocks: t.blocks + (fresh ? 1 : 0),
         focus: addTerms(t.focus, scan.terms),
         hedges: t.hedges + scan.hedges,
         carry: scan.carry,
+        tail: scan.tail,
         lastChunk: 'thinking',
       }
     }

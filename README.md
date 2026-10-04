@@ -69,7 +69,7 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
   - The turn's tool calls: the file a tool reads or edits, code names in a search pattern, and file names in a shell command.
   - The thinking text, when thinking summaries are on: a backticked span, a file name or path, or a camelCase or snake_case identifier.
 - Plain words and directories don't count.
-- `⟲ 2` counts second-guesses: how often the thinking says "wait", "actually" or "hmm". Shown in amber. Needs thinking summaries on.
+- `⟲ 2` counts second-guesses: a sentence in the thinking that opens with "Wait,", "Actually," or "Hmm,", or that narrates a change of mind ("I realize", "turns out", "on closer inspection"). The same words used as verb or adverb ("wait for CI", "actually works") do not count. Shown in amber. Needs thinking summaries on.
 - This is a word-count heuristic, not a summary, so it can pick the wrong names.
 
 ### Timeline: where the time goes

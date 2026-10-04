@@ -21,21 +21,29 @@ describe('hedgeSpans', () => {
     expect(span).toBe('Wait, register.tsx imports lib.ts and never the testkit module directly.')
   })
   test('a marker inside an earlier span starts no second span', () => {
-    expect(hedgeSpans('Actually the cache is per session and wait times never reset it here.')).toHaveLength(1)
+    expect(hedgeSpans('Actually, the cache is kept per session for good. Wait, nothing ever resets it here.')).toHaveLength(1)
   })
   test('a relative path or a spread before the plan does not hide the plan', () => {
     expect(hedgeSpans('Wait, let me check ../hooks/rows.ts and ...args before anything else here.')).toEqual([])
   })
   test('a sentence keeps the text before a `../` path', () => {
-    const [span] = hedgeSpans('Actually the helper in ../hooks/rows.ts never reads the trail at all.')
-    expect(span).toBe('Actually the helper in ../hooks/rows.ts never reads the trail at all.')
+    const [span] = hedgeSpans('Actually, the helper in ../hooks/rows.ts never reads the trail at all.')
+    expect(span).toBe('Actually, the helper in ../hooks/rows.ts never reads the trail at all.')
   })
   test('only the first four spans are built, however many markers follow', () => {
     const thinking = 'Actually, the store keeps every row it was ever given. Fine. '.repeat(50)
     expect(hedgeSpans(thinking)).toHaveLength(4)
   })
+  test('a narrated realization is a marker too', () => {
+    const [span] = hedgeSpans('Reading the hook. I realize the fs noun has no append call at all. So appends go through sh.')
+    expect(span).toBe('I realize the fs noun has no append call at all. So appends go through sh.')
+  })
+  test('the words as verb or adverb are no marker', () => {
+    expect(hedgeSpans('Push both branches and wait for the checks to finish before the merge happens.')).toEqual([])
+    expect(hedgeSpans('Check how the path resolution logic actually works before writing the test.')).toEqual([])
+  })
   test('spans are clipped', () => {
-    const [span] = hedgeSpans(`Actually ${'the store keeps every row '.repeat(40)}.`)
+    const [span] = hedgeSpans(`Actually, ${'the store keeps every row '.repeat(40)}.`)
     expect(span?.length).toBe(SPAN_MAX)
   })
 })
