@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement, RenderPropsOf, RenderSurface, TurnStepChunk, TurnStepResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { STEP, answerBelow, complete, measure } from './testkit'
+import { STEP, answerBelow, beneath, complete, drain, measure } from './testkit'
 
 const PROPS = { hasSurvey: false, isWorking: true, maxRows: 10, bodyColumns: 120 } as RenderPropsOf['AbovePrompt']
 
@@ -90,6 +90,32 @@ test('palette amber: thinking in yellow, tools dim', { options: { palette: 'ambe
   const all = await runs(await mount($))
   expect(all.find(r => r.text.startsWith('▀'))?.props.color).toBe('yellow')
   expect(all.find(r => r.text.startsWith('▄'))?.props.dimColor).toBe(true)
+})
+
+test('tones: labels dim, names plain, the second-guess count yellow', async ($, on) => {
+  mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'wait, check `metaRow` then `metaRow` again ')
+  const all = await runs(await mount($))
+  const label = all.find(r => r.text.startsWith('∴'))
+  expect(label?.props.dimColor).toBe(true)
+  expect(label?.props.color).toBeUndefined()
+  const name = all.find(r => r.text === 'metaRow')
+  expect(name?.props.dimColor).not.toBe(true)
+  expect(name?.props.color).toBeUndefined()
+  expect(all.find(r => r.text === '1')?.props.color).toBe('yellow')
+  await step.end()
+})
+
+test('tones: waiting cells gray and dim', async ($, on) => {
+  const clock = mock.clock(on)
+  engineBand(on)
+  beneath(on, [])
+  await drain($.turn.step(STEP))
+  await clock.advance(2000)
+  const waiting = (await runs(await mount($))).find(r => r.props.color === 'gray')
+  expect(waiting?.text).toBe('  ')
+  expect(waiting?.props.dimColor).toBe(true)
 })
 
 test('idle after a turn: the rows stay, with that turn\'s growth', async ($, on) => {
