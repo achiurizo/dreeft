@@ -6,7 +6,8 @@ import type { ShadowRecord } from './shadow'
 import { STEP, answerBelow, beneath, complete, drain } from './testkit'
 
 const ON = { options: { memoryShadow: 'on' } }
-const USAGE = { input_tokens: 900, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+// Input arrives in three parts; the record's `input_tokens` is their sum.
+const USAGE = { input_tokens: 600, output_tokens: 80, cache_read_input_tokens: 200, cache_creation_input_tokens: 100 }
 const THINKING = 'Actually, the engine never hands tool results to turn.step chunks at all.'
 const KEEP = '{"verdicts":[{"i":0,"verdict":"keep","fact":"dreeft: tool results reach tool.call only.","type":"project","name":"tool-results-in-tool-call","topic":"context-dreeft","keywords":["tool.call"],"importance":"high","reason":"gotcha"}]}'
 

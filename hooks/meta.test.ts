@@ -102,6 +102,16 @@ test('context tracks each step live from stop usage, output included', WITH_PROB
   expect(await probe($, 'ctx')).toMatchObject({ tokens: 102_000, window: 1_000_000 })
 })
 
+test('context counts cached input along with fresh input', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  answerBelow(on)
+  const usage = { model: 'm', input_tokens: 1_000, output_tokens: 2_000, cache_read_input_tokens: 90_000, cache_creation_input_tokens: 9_000 }
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, { kind: 'stop', stopReason: 'end_turn', usage }])
+  await measure($, 90_000, 1_000_000)
+  await drain($.turn.step(STEP))
+  expect(await probe($, 'ctx')).toMatchObject({ tokens: 102_000, lastInput: 100_000 })
+})
+
 test('a late measure for the same response is ignored', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
