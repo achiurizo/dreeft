@@ -20,6 +20,31 @@ test('passes every chunk through unchanged, in order', async ($, on) => {
   expect(out).toEqual(THINK_THEN_TOOL)
 })
 
+test('a step read to its end returns the result from beneath unchanged', async ($, on) => {
+  mock.clock(on)
+  const toolUses = [{ name: 'Read', input: { file_path: '/repo/hooks/rows.ts' } }]
+  beneath(on, { chunks: THINK_THEN_TOOL, toolUses })
+  const stream = $.turn.step(STEP)
+  let step = await stream.next()
+  while (!step.done) step = await stream.next()
+  expect(step.value).toEqual({ turnId: 't1', index: 0, answer: '', toolUses, stopReason: 'end_turn', usage: null })
+})
+
+test('a step closed early closes the stream beneath', async ($, on) => {
+  mock.clock(on)
+  let closed = false
+  on('turn.step', async function* (_$, e) {
+    try {
+      yield* THINK_THEN_TOOL
+    } finally {
+      closed = true
+    }
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+  })
+  for await (const _ of $.turn.step(STEP)) break
+  expect(closed).toBe(true)
+})
+
 test('a step records its phases and counts its block and tool', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   beneath(on, THINK_THEN_TOOL)
