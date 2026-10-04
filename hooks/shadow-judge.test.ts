@@ -44,7 +44,7 @@ describe('records', () => {
       verdict: 'keep', fact: 'b: the log appends with sh.', type: 'project', name: 'log-appends', topic: 'decisions-b', keywords: ['log'], importance: 'medium', reason: 'decision',
     })
   })
-  test('a kept record converts to the flush staging shape; a dropped one does not', () => {
+  test('a kept record converts to a memory staging entry; a dropped one does not', () => {
     const staged = record && toStaging(record)
     expect(staged).toMatchObject({ created_at: ctx.ts, session: 's1', type: 'project', name: 'log-appends', description: 'b: the log appends with sh.' })
     expect(staged?.body).toContain('**Evidence:** unconfirmed')

@@ -7,11 +7,11 @@ import type { Candidate, Evidence } from './shadow-candidates'
 export type Verdict = {
   verdict: 'keep' | 'drop' | 'error'
   fact: string | null
-  /** Memory type, as the flush staging queue takes it. */
+  /** The kind of memory the fact would be filed as. */
   type: 'user' | 'feedback' | 'project' | 'reference' | null
-  /** Kebab-case memory name, as the flush staging queue takes it. */
+  /** Kebab-case memory name. */
   name: string | null
-  /** ICM topic: decisions-<project>, context-<project>, errors-resolved, strategies-<domain>. */
+  /** Topic to file the fact under: decisions-<project>, context-<project>, errors-resolved, strategies-<domain>. */
   topic: string | null
   keywords: string[]
   importance: 'high' | 'medium' | null
@@ -28,7 +28,7 @@ export type ShadowRecord = {
   session: string
   turn: string
   project: string
-  /** The repo's main checkout (worktrees resolved), which keys the flush staging queue. */
+  /** The repo's main checkout (worktrees resolved): one key for a project, whichever worktree the session ran in. */
   root: string
   source: Candidate['source']
   term: string | null
@@ -38,7 +38,7 @@ export type ShadowRecord = {
   judge: JudgeMeta
 } & Verdict
 
-/** The icm-tend keep/drop rubric, as the judge's system prompt. */
+/** The keep/drop rubric, as the judge's system prompt. */
 export const JUDGE_SYSTEM = `You review candidate facts taken from a coding session's private reasoning. Most are
 noise: task status, a plan in flight, a guess. A few state a durable fact.
 
@@ -167,9 +167,8 @@ export function buildRecords(ctx: RecordContext, candidates: Candidate[], verdic
 }
 
 /**
- * What `memory-candidates.ts add` would take for a kept record, plus the fields `add` stamps
- * itself (`created_at`, `session`). Shown only to prove the record carries everything; the
- * shadow pass never stages.
+ * A kept record as the entry a memory staging queue would take. Shown only to prove the record
+ * carries everything such an entry needs; the shadow pass never stages.
  */
 export function toStaging(r: ShadowRecord): { created_at: string; session: string; type: string; name: string; description: string; body: string } | null {
   if (r.verdict !== 'keep' || !r.fact || !r.type || !r.name) return null
@@ -179,7 +178,7 @@ export function toStaging(r: ShadowRecord): { created_at: string; session: strin
     `**Why:** ${r.reason}`,
     `**Evidence:** ${r.evidence ? r.evidence.snippet : 'unconfirmed'}`,
     `**Source:** ${r.source} span, turn ${r.turn}: ${r.span}`,
-    `**ICM:** topic ${r.topic ?? 'none'}, importance ${r.importance ?? 'medium'}, keywords ${r.keywords.join(', ') || 'none'}`,
+    `**Filing:** topic ${r.topic ?? 'none'}, importance ${r.importance ?? 'medium'}, keywords ${r.keywords.join(', ') || 'none'}`,
   ]
   return { created_at: r.ts, session: r.session, type: r.type, name: r.name, description: r.fact, body: lines.join('\n') }
 }

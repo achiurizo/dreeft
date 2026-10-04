@@ -60,7 +60,7 @@ test('a turn with a candidate: one judge call, one record per candidate appended
   expect(w.asked[0]?.model).toBe('haiku')
   // Owner-only: the log quotes thinking and tool results.
   expect(w.argvs.find(a => a[0] === '/bin/sh')).toEqual(['/bin/sh', '-c', 'umask 077 && mkdir -p "$1" && chmod 700 "$1" && cat >> "$1/$2"', 'sh', '/home/u/.local/state/dreeft', 'memory-shadow.jsonl'])
-  // Shadow mode only: git lookups and the log append, never icm or the flush staging queue.
+  // Shadow mode only: git lookups and the log append, never a memory store or a staging queue.
   expect(w.argvs.map(a => a[0] === '/bin/sh' ? 'sh' : a.slice(0, 1).join(''))).toEqual(['git', 'git', 'sh'])
   const records = recordsOf(w.appended)
   expect(records).toHaveLength(1)
