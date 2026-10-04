@@ -3,7 +3,7 @@
 
 import type { ToolCallInput, ToolCallResult, TurnCompleteInput, TurnStepChunk, TurnStepInput } from 'claude-code'
 
-import { HEDGE, scanThought, toolTerms } from './lib'
+import { FOCUS_MIN, HEDGE, scanThought, toolTerms } from './lib'
 
 /** What one main-loop turn left behind for the shadow pass. */
 export type ShadowTurn = {
@@ -120,7 +120,7 @@ export function repeatedTerms(turn: ShadowTurn): { t: string; n: number }[] {
   scanThought('', `${turn.thinking} `).terms.forEach(add)
   turn.tools.forEach(u => u.terms.forEach(add))
   return [...counts]
-    .filter(([, n]) => n >= 2)
+    .filter(([, n]) => n >= FOCUS_MIN)
     .sort((a, b) => b[1] - a[1])
     .map(([t, n]) => ({ t, n }))
 }

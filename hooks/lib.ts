@@ -1,6 +1,6 @@
 import type { TurnStepChunk } from 'claude-code'
 
-import type { Phase, Span, Term, TurnMeta } from '../types'
+import type { Ctx, Phase, Span, Term, Trail, TurnMeta } from '../types'
 
 /** How a segment is drawn: `faint` and `dim` recede, `warn` is amber, `think` and `tool` follow the palette. */
 export type Tone = 'faint' | 'dim' | 'bright' | 'warn' | 'think' | 'tool'
@@ -9,7 +9,8 @@ export type Seg = { text: string; tone: Tone }
 /** The turn figures the meta row shows; `thinkMs` in milliseconds. */
 export type Meta = { thinkMs: number; blocks: number; tools: number }
 
-const width = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
+/** The terminal cells a row takes. */
+export const width = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
 
 /** Milliseconds as whole seconds: `42s`, or `1m5s` from a minute up. */
 export function formatSecs(ms: number): string {
@@ -105,7 +106,7 @@ export function addTerms(focus: Term[], terms: string[]): Term[] {
 }
 
 /** A name has to come back at least this often to count as focus. */
-const FOCUS_MIN = 2
+export const FOCUS_MIN = 2
 
 /** The `k` most-mentioned terms with at least `FOCUS_MIN` mentions; ties go to the most recent. */
 export function topTerms(focus: Term[], k: number): Term[] {
@@ -320,7 +321,7 @@ export function braille(values: number[]): string {
  * @param current - this turn's growth in points, or null when unmeasured
  * @param cells - braille cells to draw, two turns each
  */
-export function growthTrail(history: (number | null)[], current: number | null, cells: number): { past: Seg[]; now: string } {
+export function growthTrail(history: Trail, current: number | null, cells: number): { past: Seg[]; now: string } {
   const turns: number[] = []
   const cuts = new Set<number>() // a compaction before turns[i]
   for (const v of [...history, current ?? 0]) {
@@ -357,7 +358,7 @@ export function formatGrowth(points: number): string {
  * @param growth - this turn's growth in points of the window, or null when unmeasured
  * @param history - earlier turns' growth in points, oldest first; null marks a compaction
  */
-export function metaRow(meta: Meta, growth: number | null, history: (number | null)[], max: number): Seg[] {
+export function metaRow(meta: Meta, growth: number | null, history: Trail, max: number): Seg[] {
   const head = `◆ ${formatSecs(meta.thinkMs)} · ${meta.blocks} blk`
   const tools = ` · ${meta.tools} ${meta.tools === 1 ? 'tool' : 'tools'}`
   if (growth === null) {
@@ -374,4 +375,50 @@ export function metaRow(meta: Meta, growth: number | null, history: (number | nu
     [{ text: head, tone: 'dim' }, ...g],
   ]
   return candidates.find(c => width(c) <= max) ?? []
+}
+
+// The band: the three rows together.
+
+/** The widest the band draws, in terminal cells. */
+const MAX_WIDTH = 84
+/** The share of the body's columns the band may take. */
+const WIDTH_SHARE = 0.6
+/** Under this many cells the band draws nothing. */
+const MIN_WIDTH = 12
+/** The most names the focus row shows. */
+export const FOCUS_TERMS = 3
+/** Cells the engine's `[-]` collapse mark covers at the band's top-right corner, plus a gap. */
+export const CORNER = 4
+
+/** The band's width in a body `columns` wide, or null when too narrow to draw. */
+export function bandWidth(columns: number): number | null {
+  const cells = Math.min(MAX_WIDTH, Math.floor(columns * WIDTH_SHARE))
+  return cells < MIN_WIDTH ? null : cells
+}
+
+/** Context growth since the turn's step 0, in percentage points of the window. */
+export function growthOf(t: TurnMeta | null, c: Ctx | null): number | null {
+  if (!t || !c || t.startTokens === null || t.window <= 0) return null
+  return Math.round(((c.tokens - t.startTokens) / t.window) * 10000) / 100
+}
+
+/**
+ * The band's rows for a turn, top to bottom: focus, timeline, meta. A band short of rows keeps
+ * the bottom ones, the top row stops short of the corner, and a row with nothing to show drops.
+ * @param trail - recent turns' growth; a done turn's own growth is already its last entry
+ * @param max - width in terminal cells
+ * @param maxRows - most rows the band may take
+ */
+export function bandRows(t: TurnMeta, trail: Trail, ctx: Ctx | null, max: number, maxRows: number): Seg[][] {
+  const growth = t.done ? t.final : growthOf(t, ctx)
+  const history = t.done && t.final !== null ? trail.slice(0, -1) : trail
+  const meta = { thinkMs: phaseTotals(t.spans, t.now).think, blocks: t.blocks, tools: t.tools }
+  const builders = [
+    (cells: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, cells),
+    (cells: number) => timelineRow(t.spans, t.started, t.now, cells),
+    (cells: number) => metaRow(meta, growth, history, cells),
+  ].slice(-Math.max(1, maxRows))
+  return builders
+    .map((build, i): Seg[] => (i === 0 ? [...build(max - CORNER), { text: ' '.repeat(CORNER), tone: 'dim' }] : build(max)))
+    .filter(row => row.some(seg => seg.text.trim() !== ''))
 }

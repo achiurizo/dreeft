@@ -1,7 +1,7 @@
 import type { On, TurnCompleteInput, TurnStepChunk, TurnStepInput, TurnStepResult, TurnStepToolUse } from 'claude-code'
 import type { Engine, Plugin } from 'claude-code/testing'
 
-import type { Ctx, TurnMeta } from '../types'
+import type { Ctx, Trail, TurnMeta } from '../types'
 
 export const STEP: TurnStepInput = { turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1 }
 
@@ -26,7 +26,7 @@ export const PROBE: Plugin = {
   },
 }
 
-type Probed = { turn: TurnMeta | null; trail: (number | null)[] | null; ctx: Ctx | null }
+type Probed = { turn: TurnMeta | null; trail: Trail | null; ctx: Ctx | null }
 
 export async function probe<K extends keyof Probed = 'turn'>($: Engine, key?: K): Promise<Probed[K]> {
   const { text } = await $.command.run({

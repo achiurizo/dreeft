@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
-import { addTerms, enterPhase, focusRow, formatSecs, newTurn, phaseOfMode, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, toolTerms, topTerms } from './lib'
+import { addTerms, bandRows, bandWidth, enterPhase, focusRow, formatSecs, growthOf, newTurn, phaseOfMode, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, toolTerms, topTerms } from './lib'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -252,5 +252,51 @@ describe('reduceChunk', () => {
 describe('phaseOfMode', () => {
   test('maps every spinner mode to a phase', () => {
     expect((['requesting', 'thinking', 'responding', 'tool-input', 'tool-use'] as const).map(m => phaseOfMode(m))).toEqual(['wait', 'think', 'write', 'tool', 'tool'])
+  })
+})
+
+describe('band', () => {
+  /** A turn that started at 100k of a 1M window, thought for 2s and named `metaRow` twice. */
+  const turn: TurnMeta = {
+    ...newTurn(0, 100_000, 1_000_000),
+    now: 2000,
+    spans: [{ phase: 'think', at: 0 }],
+    focus: [{ t: 'metaRow', n: 2 }],
+    blocks: 1,
+  }
+  const ctx = { tokens: 106_000, window: 1_000_000, lastInput: null }
+
+  test('bandWidth: six tenths of the body, capped at 84, nothing under 12', () => {
+    expect(bandWidth(100)).toBe(60)
+    expect(bandWidth(300)).toBe(84)
+    expect(bandWidth(20)).toBe(12)
+    expect(bandWidth(19)).toBeNull()
+  })
+
+  test('growthOf: points of the window since step 0; null without a start or a window', () => {
+    expect(growthOf(turn, ctx)).toBe(0.6)
+    expect(growthOf(turn, null)).toBeNull()
+    expect(growthOf({ ...turn, startTokens: null }, ctx)).toBeNull()
+    expect(growthOf({ ...turn, window: 0 }, ctx)).toBeNull()
+  })
+
+  test('bandRows: focus, timeline, meta; the top row ends in the blank corner', () => {
+    const rows = bandRows(turn, [], ctx, 60, 10).map(text)
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toBe('∴ metaRow ×2    ')
+    expect(rows[1]?.startsWith('▀▀')).toBe(true)
+    expect(rows[2]?.startsWith('◆ 2s · 1 blk · 0 tools   +0.6%')).toBe(true)
+  })
+
+  test('bandRows: a short band keeps the bottom rows', () => {
+    expect(bandRows(turn, [], ctx, 60, 2).map(r => text(r).slice(0, 1))).toEqual(['▀', '◆'])
+    expect(bandRows(turn, [], ctx, 60, 0).map(r => text(r).slice(0, 1))).toEqual(['◆'])
+  })
+
+  test('bandRows: a done turn shows its fixed growth and is not drawn twice in the trail', () => {
+    const done = { ...turn, done: true, final: 0.6 }
+    const meta = (trail: (number | null)[]) => text(bandRows(done, trail, null, 60, 1)[0] ?? [])
+    expect(meta([5, 0.6])).toBe(text(bandRows(turn, [5], ctx, 60, 1)[0] ?? []))
+    expect(meta([5, 0.6])).toContain('+0.6%')
   })
 })
