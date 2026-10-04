@@ -19,7 +19,7 @@ export const SPAN_MAX = 500
 const SNIPPET_MAX = 300
 /** Hedge candidates kept per turn, then focus candidates, then the total. */
 const HEDGE_MAX = 4
-const FOCUS_MAX = 3
+const FOCUS_CANDIDATES = 3
 const CANDIDATE_MAX = 6
 /** A corrected belief says something: fewer words after the marker is a stall, not a claim. */
 const MIN_WORDS = 6
@@ -110,7 +110,7 @@ export function selectCandidates(turn: ShadowTurn): Candidate[] {
     .map(span => ({ source: 'hedge', span, evidence: findEvidence(turn, scanThought('', `${span} `).terms) }))
   const focus: Candidate[] = []
   for (const { t } of repeatedTerms(turn)) {
-    if (focus.length >= FOCUS_MAX) break
+    if (focus.length >= FOCUS_CANDIDATES) break
     const span = mentions(turn.thinking, t)
     if (span === '') continue // only tool calls named it: no belief to judge
     focus.push({ source: 'focus', term: t, span, evidence: findEvidence(turn, [t]) })
