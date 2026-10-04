@@ -137,10 +137,12 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 ```json
 {
   "pluginConfigs": {
-    "dreeft": { "options": { "palette": "amber" } }
+    "dreeft@dreeft": { "options": { "palette": "amber" } }
   }
 }
 ```
+
+The key is `dreeft@dreeft` for a marketplace install. A clone loaded with `--plugin-dir` or `CLAUDE_CODE_PLUGIN_DIRS` reads the key `dreeft` instead.
 
 ## Memory shadow log (experimental)
 
@@ -149,14 +151,14 @@ A spike that measures whether the session's thinking holds durable facts worth k
 <details>
 <summary>What it logs, and how to read it</summary>
 
-With `memoryShadow` set to `on`, the mod does three things it never does otherwise. It sends quoted thinking, quoted tool output and the repo's `origin` URL to the model provider, on your account. It runs `git` to find the repo and `sh` to append to the log. It writes the log file. After each main-loop turn that was not interrupted:
+With `memoryShadow` set to `on`, the mod does three things it never does otherwise. It sends quoted thinking, quoted tool output or answer text, and the repo's `origin` URL (the repo's directory name when there is no `origin`) to the model provider, on your account. It runs `git` to find the repo and `sh` to append to the log. It writes the log file. The append needs `/bin/sh`, so macOS, Linux or WSL: on native Windows the judge call still runs and nothing is logged, so leave the setting off there. After each main-loop turn that was not interrupted:
 
 1. Candidates come from the turn's thinking (thinking summaries must be on):
    - **hedge**: the sentence after a "wait", "actually" or "hmm" that states something, not a plan or a question.
    - **focus**: a name the turn came back to at least twice, with the thinking sentences that mention it.
 2. Each candidate gets outcome evidence from the same turn: the last successful tool result that names it, else the sentence of the answer that names it. A candidate with no evidence is still logged, with `confirmed: false`.
 3. One Haiku call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
-4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`: time, session, turn, project (the `origin` URL, credentials stripped), `root` (the absolute path of the repo's main checkout), candidate source, `term` (the repeated name, for a focus candidate), span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`) and the judge's one-line `reason`, and for a keep the fact, keywords and importance, plus the memory type, name and topic a memory store could file the fact under. Each line also records the judge call's token usage.
+4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`: time, session, turn, project (the `origin` URL, credentials stripped, or the repo's directory name when there is no `origin`), `root` (the absolute path of the repo's main checkout), candidate source, `term` (the repeated name, for a focus candidate), span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`) and the judge's one-line `reason`, and for a keep the fact, keywords and importance, plus the memory type, name and topic a memory store could file the fact under. Each line also records the judge call's token usage.
 5. Spans and evidence quote your session, so anything shaped like a credential (a `SECRET=` or `token:` value, a URL password, a known key prefix) is replaced with `[redacted]` before the judge call and the log, and a repeated name that is itself shaped like a credential is not a candidate. The match is by pattern and can miss a secret in an unusual shape. The log directory is created owner-only (`700`).
 6. A name or span already judged in the session is not judged again.
 
