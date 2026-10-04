@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
-import { enterPhase, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineCells } from './turn'
+import { SPANS_MAX, enterPhase, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineCells } from './turn'
 import { stop } from './testkit'
 
 describe('phases', () => {
@@ -111,5 +111,42 @@ describe('reduceChunk', () => {
 describe('phaseOfMode', () => {
   test('maps every spinner mode to a phase', () => {
     expect((['requesting', 'thinking', 'responding', 'tool-input', 'tool-use'] as const).map(m => phaseOfMode(m))).toEqual(['wait', 'think', 'write', 'tool', 'tool'])
+  })
+})
+
+describe('enterPhase', () => {
+  /** A turn of `steps` think/tool pairs, a second each, with one 10ms wait slipped in at `blip`. */
+  const long = (steps: number, blip: number): TurnMeta => {
+    let t = newTurn(0, null, 0)
+    for (let i = 0; i < steps; i++) {
+      t = enterPhase(t, 'think', 1000 + i * 2000)
+      if (i === blip) t = enterPhase(enterPhase(t, 'wait', 1500 + i * 2000), 'think', 1510 + i * 2000)
+      t = enterPhase(t, 'tool', 2000 + i * 2000)
+    }
+    return t
+  }
+
+  test('under the cap every phase change is a span', () => {
+    expect(long(10, -1).spans.length).toBe(21)
+  })
+
+  test('a long turn keeps at most SPANS_MAX spans, so its state stops growing', () => {
+    expect(long(2000, -1).spans.length).toBe(SPANS_MAX)
+  })
+
+  test('past the cap the shortest span folds into the one before, and the same phase on both sides joins up', () => {
+    const t = long(SPANS_MAX / 2 - 1, 3)
+    expect(t.spans.length).toBe(SPANS_MAX - 1)
+    expect(t.spans.some(s => s.at === 7500 || s.at === 7510)).toBe(false)
+    expect(t.spans.slice(7, 9)).toEqual([{ phase: 'think', at: 7000 }, { phase: 'tool', at: 8000 }])
+  })
+
+  test('the cap keeps the turn start, the running phase and the total time', () => {
+    const t = long(2000, -1)
+    const end = 4_001_000
+    expect(t.spans[0]).toEqual({ phase: 'wait', at: 0 })
+    expect(t.spans.at(-1)).toEqual({ phase: 'tool', at: 4_000_000 })
+    const sums = phaseTotals(t.spans, end)
+    expect(sums.wait + sums.think + sums.tool + sums.write).toBe(end)
   })
 })

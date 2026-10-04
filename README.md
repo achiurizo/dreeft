@@ -76,7 +76,7 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
 
 <img src="assets/row-timeline.svg" width="820" alt="Timeline row: a strip of cells with thinking on the top lane, tools on the bottom lane, a blank waiting cell and a full block for writing, then think 11s, tools 13s, write 5s.">
 
-One cell per second of the turn, so the strip grows while the turn runs, tool runs included. A long turn packs several seconds into each cell so the whole turn fits. When several phases touch one cell, it shows the most notable: thinking, then tool, then writing, then waiting.
+One cell per second of the turn, so the strip grows while the turn runs, tool runs included. A long turn packs several seconds into each cell so the whole turn fits. When several phases touch one cell, it shows the most notable: thinking, then tool, then writing, then waiting. A turn keeps at most 240 phase changes: past that, the shortest phase folds into the one before it, so a very long turn can lose a sub-second burst from the strip and the totals.
 
 Each cell is two lanes, thinking on top and tools below:
 

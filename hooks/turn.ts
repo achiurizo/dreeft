@@ -79,10 +79,23 @@ export function newTurn(started: number, startTokens: number | null, window: num
   }
 }
 
+/** Most spans a turn keeps, so a turn of thousands of steps does not grow the state written on every chunk. */
+export const SPANS_MAX = 240
+
+/** Over the cap, the shortest finished span folds into the one before it; the turn's start and running span stay. */
+function capSpans(spans: Span[]): Span[] {
+  if (spans.length <= SPANS_MAX) return spans
+  const lengths = spans.slice(1, -1).map((s, i) => (spans[i + 2]?.at ?? s.at) - s.at)
+  const drop = 1 + lengths.indexOf(Math.min(...lengths))
+  // With the span gone, the same phase can sit on both sides: that is one span.
+  const joined = spans[drop - 1]?.phase === spans[drop + 1]?.phase
+  return spans.filter((_, i) => i !== drop && !(joined && i === drop + 1))
+}
+
 /** Enter `phase` at `now`; staying in the same phase adds no span. */
 export function enterPhase(t: TurnMeta, phase: Phase, now: number): TurnMeta {
   const last = t.spans.at(-1)
-  return { ...t, now, spans: last?.phase === phase ? t.spans : [...t.spans, { phase, at: now }] }
+  return { ...t, now, spans: last?.phase === phase ? t.spans : capSpans([...t.spans, { phase, at: now }]) }
 }
 
 /** A block's last word has no space after it: scan it once the block ends. */
