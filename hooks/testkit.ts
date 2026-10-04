@@ -26,6 +26,9 @@ export const PROBE: Plugin = {
   },
 }
 
+/** Test options that load the probe beside the mod. */
+export const WITH_PROBE = { plugins: [PROBE] }
+
 type Probed = { turn: TurnMeta | null; trail: Trail | null; ctx: Ctx | null }
 
 export async function probe<K extends keyof Probed = 'turn'>($: Engine, key?: K): Promise<Probed[K]> {
@@ -50,6 +53,12 @@ export function beneath(on: On, ...steps: Step[]) {
     for (const chunk of chunks) yield chunk
     return { turnId: e.turnId, index: e.index, answer: '', toolUses, stopReason: 'end_turn', usage: null }
   })
+}
+
+/** A step's closing chunk with its usage: fresh input, output, and what the cache read and wrote. */
+export function stop(stopReason: 'end_turn' | 'tool_use', input: number, output: number, cache = { read: 0, creation: 0 }): TurnStepChunk {
+  const usage = { model: 'm', input_tokens: input, output_tokens: output, cache_read_input_tokens: cache.read, cache_creation_input_tokens: cache.creation }
+  return { kind: 'stop', stopReason, usage }
 }
 
 /** Engine-side answers for the events the mod observes and passes on. */

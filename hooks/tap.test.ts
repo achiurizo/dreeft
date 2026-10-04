@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On, RenderElement, RenderPropsOf, TurnStepChunk } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { PROBE, STEP, answerBelow, beneath, complete, drain, probe } from './testkit'
+import { STEP, WITH_PROBE, answerBelow, beneath, complete, drain, probe } from './testkit'
 
 const THINK_THEN_TOOL: TurnStepChunk[] = [
   { kind: 'thinking', index: 0, text: 'weighing the ' },
@@ -11,7 +11,6 @@ const THINK_THEN_TOOL: TurnStepChunk[] = [
   { kind: 'stop', stopReason: 'tool_use', usage: null },
 ]
 
-const WITH_PROBE = { plugins: [PROBE] }
 
 test('passes every chunk through unchanged, in order', async ($, on) => {
   mock.clock(on)

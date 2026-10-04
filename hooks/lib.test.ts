@@ -2,6 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
 import { addTerms, bandRows, bandWidth, enterPhase, focusRow, formatSecs, growthOf, newTurn, phaseOfMode, phaseTotals, reduceChunk, scanThought, timelineCells, timelineRow, toolTerms, topTerms } from './lib'
+import { stop } from './testkit'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -242,7 +243,7 @@ describe('reduceChunk', () => {
   test('stop moves the clock on and changes no phase', () => {
     const t = reduceChunk(
       t0,
-      { kind: 'stop', stopReason: 'end_turn', usage: { model: 'm', input_tokens: 1, output_tokens: 40, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
+      stop('end_turn', 1, 40),
       100,
     )
     expect(t).toMatchObject({ now: 100, spans: t0.spans, lastChunk: 'stop' })

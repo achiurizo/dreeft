@@ -1,21 +1,14 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { TurnStepChunk } from 'claude-code'
 
 import { phaseTotals } from './lib'
-import { PROBE, STEP, answerBelow, beneath, complete, drain, measure, probe } from './testkit'
-
-const WITH_PROBE = { plugins: [PROBE] }
-const STOP = (output_tokens: number): TurnStepChunk => ({
-  kind: 'stop', stopReason: 'tool_use',
-  usage: { model: 'm', input_tokens: 1, output_tokens, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-})
+import { STEP, WITH_PROBE, answerBelow, beneath, complete, drain, measure, probe, stop } from './testkit'
 
 test('step 0 snapshots context; blocks and think time accumulate', WITH_PROBE, async ($, on) => {
   const clock = mock.clock(on)
   answerBelow(on)
   beneath(on,
-    [{ kind: 'thinking', index: 0, text: 'a' }, { kind: 'tool', index: 1, id: 't', name: 'Bash' }, STOP(400)],
-    [{ kind: 'thinking', index: 0, text: 'b' }, { kind: 'text', index: 1, text: 'ok' }, STOP(600)],
+    [{ kind: 'thinking', index: 0, text: 'a' }, { kind: 'tool', index: 1, id: 't', name: 'Bash' }, stop('tool_use', 1, 400)],
+    [{ kind: 'thinking', index: 0, text: 'b' }, { kind: 'text', index: 1, text: 'ok' }, stop('tool_use', 1, 600)],
   )
   await measure($, 100_000, 1_000_000)
   const s0 = $.turn.step(STEP)
@@ -88,15 +81,10 @@ test('a precompute, a skipped compaction or a subagent compaction leaves the tra
   expect((await probe($, 'trail')) ?? []).toEqual([])
 })
 
-const USAGE = (input: number, output: number): TurnStepChunk => ({
-  kind: 'stop', stopReason: 'end_turn',
-  usage: { model: 'm', input_tokens: input, output_tokens: output, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-})
-
 test('context tracks each step live from stop usage, output included', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
-  beneath(on, [{ kind: 'tool', index: 0, id: 't', name: 'Bash' }, USAGE(100_000, 2_000)])
+  beneath(on, [{ kind: 'tool', index: 0, id: 't', name: 'Bash' }, stop('end_turn', 100_000, 2_000)])
   await measure($, 100_000, 1_000_000)
   await drain($.turn.step(STEP))
   expect(await probe($, 'ctx')).toMatchObject({ tokens: 102_000, window: 1_000_000 })
@@ -105,8 +93,7 @@ test('context tracks each step live from stop usage, output included', WITH_PROB
 test('context counts cached input along with fresh input', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
-  const usage = { model: 'm', input_tokens: 1_000, output_tokens: 2_000, cache_read_input_tokens: 90_000, cache_creation_input_tokens: 9_000 }
-  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, { kind: 'stop', stopReason: 'end_turn', usage }])
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, stop('end_turn', 1_000, 2_000, { read: 90_000, creation: 9_000 })])
   await measure($, 90_000, 1_000_000)
   await drain($.turn.step(STEP))
   expect(await probe($, 'ctx')).toMatchObject({ tokens: 102_000, lastInput: 100_000 })
@@ -115,7 +102,7 @@ test('context counts cached input along with fresh input', WITH_PROBE, async ($,
 test('a late measure for the same response is ignored', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
-  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, USAGE(100_000, 2_000)])
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, stop('end_turn', 100_000, 2_000)])
   await measure($, 90_000, 1_000_000)
   await drain($.turn.step(STEP))
   await measure($, 100_000, 1_000_000)
@@ -125,7 +112,7 @@ test('a late measure for the same response is ignored', WITH_PROBE, async ($, on
 test('a measure with different tokens (compaction) is adopted', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
-  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, USAGE(100_000, 2_000)])
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, stop('end_turn', 100_000, 2_000)])
   await measure($, 90_000, 1_000_000)
   await drain($.turn.step(STEP))
   await measure($, 40_000, 1_000_000)
@@ -135,7 +122,7 @@ test('a measure with different tokens (compaction) is adopted', WITH_PROBE, asyn
 test('final growth includes the turn\'s own last answer, even if measure lands after complete', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
-  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, USAGE(104_000, 3_000)])
+  beneath(on, [{ kind: 'text', index: 0, text: 'ok' }, stop('end_turn', 104_000, 3_000)])
   await measure($, 100_000, 1_000_000)
   await drain($.turn.step(STEP))
   await complete($, {})

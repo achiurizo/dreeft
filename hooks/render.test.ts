@@ -23,9 +23,7 @@ async function thinking($: Engine, on: On, text: string, then: TurnStepChunk[] =
     stream,
     async end() {
       release()
-      for await (const _ of stream) {
-        // read to the end
-      }
+      await drain(stream)
     },
   }
 }
