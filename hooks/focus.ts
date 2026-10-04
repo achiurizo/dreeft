@@ -4,8 +4,21 @@ import type { Term } from '../types'
 
 const CARRY_MAX = 200
 const FOCUS_MAX = 50
-/** A second-guess marker in thinking text. */
-export const HEDGE = /\b(wait|actually|hmm+)\b/gi
+/** Scanned text kept as left context: longer than any marker, so a match reaching past it never began at its cut edge. */
+const TAIL_MAX = 48
+/**
+ * A sentence that opens with an interjection: "Actually, the types already cover it." The bare
+ * words are verb and adverb far more often ("wait for CI", "actually works"), so the marker needs
+ * a sentence start before it and punctuation after it.
+ */
+const INTERJECTION = String.raw`(?<=^|[.!?:]\s+)(?:wait|actually|hmm+|oh|oops|no)(?=\s*[,.!\u2014-]\s)`
+/** A narrated change of mind: summarized thinking says "I realize" more often than it says "wait". */
+const REALIZATION = String.raw`\b(?:I(?:['\u2019]m| am) realizing|I (?:just )?realized?|turns out|on closer (?:look|inspection|reading)|(?:I need to|let me|I should) reconsider)\b`
+/**
+ * A second-guess marker in thinking text. Measured over 686 thinking blocks in 60 sessions: the
+ * bare words matched 213 times with no reversal among 14 sampled; these two shapes match 35 times.
+ */
+export const HEDGE = new RegExp(`${INTERJECTION}|${REALIZATION}`, 'gim')
 const TOKEN = /`([^`\n]+)`|[A-Za-z_][\w./-]*\w/g
 const FILE = /\.(tsx?|jsx?|mjs|cjs|json|md|py|rb|go|rs|sh|fish|toml|ya?ml|css|html)$/i
 
@@ -35,8 +48,12 @@ const isOdd = (s: string) => (s.match(/`/g) ?? []).length % 2 === 1
  * still open on the last line, is held back as `carry` so a name split across chunks still counts.
  * A name never spans lines, so a fence or a stray backtick holds nothing past its own line; held
  * text that outgrows `CARRY_MAX` was no name, and is scanned as prose.
+ *
+ * A second-guess is a phrase in a sentence position, so it needs the text before it: `tail` is the
+ * end of what was already scanned. Only a marker that reaches past the tail counts, which is one
+ * the earlier pieces could not have counted.
  */
-export function scanThought(carry: string, piece: string): { terms: string[]; hedges: number; carry: string } {
+export function scanThought(carry: string, piece: string, tail = ''): { terms: string[]; hedges: number; carry: string; tail: string } {
   const text = blankRuns(carry + piece)
   let cut = text.search(/\s\S*$/) + 1
   if (isOdd(text.slice(text.lastIndexOf('\n', cut - 1) + 1, cut))) cut = text.lastIndexOf('`', cut - 1)
@@ -48,7 +65,10 @@ export function scanThought(carry: string, piece: string): { terms: string[]; he
     const term = m[1] !== undefined ? normTerm(m[1]) : isCode(m[0]) ? normTerm(m[0]) : null
     if (term !== null) terms.push(term)
   }
-  return { terms, hedges: (ready.match(HEDGE) ?? []).length, carry: rest }
+  const scanned = tail + ready
+  let hedges = 0
+  for (const m of scanned.matchAll(HEDGE)) if (m.index + m[0].length > tail.length) hedges++
+  return { terms, hedges, carry: rest, tail: scanned.slice(-TAIL_MAX) }
 }
 
 /** Arguments that name the file a tool reads or writes. */

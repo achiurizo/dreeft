@@ -40,10 +40,12 @@ export type TurnMeta = {
   spans: Span[]
   /** Names the thinking mentioned, with counts. */
   focus: Term[]
-  /** Second-guesses: how often the thinking said "wait", "actually" or "hmm". */
+  /** Second-guesses: how often the thinking opened a sentence with "Wait," or "Actually,", or narrated an "I realize". */
   hedges: number
   /** Thinking text not yet scanned: a partial word or an open backtick. */
   carry: string
+  /** The end of the thinking text already scanned: left context for a second-guess that opens a sentence. */
+  tail: string
   /** The kind of the last chunk this step, to tell a new thinking block from more of one. */
   lastChunk: 'thinking' | 'text' | 'tool' | 'stop' | null
 }
