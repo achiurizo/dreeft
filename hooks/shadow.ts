@@ -3,7 +3,7 @@
 
 import type { ToolCallInput, ToolCallResult, TurnCompleteInput, TurnStepChunk, TurnStepInput } from 'claude-code'
 
-import { FOCUS_MIN, HEDGE, scanThought, toolTerms } from './lib'
+import { FOCUS_MIN, HEDGE, scanThought, toolTerms } from './focus'
 
 /** What one main-loop turn left behind for the shadow pass. */
 export type ShadowTurn = {

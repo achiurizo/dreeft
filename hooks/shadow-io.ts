@@ -4,7 +4,7 @@
 
 import type { EngineInterface } from 'claude-code'
 
-import { inputTokens } from './lib'
+import { inputTokens } from './turn'
 import { JUDGE_SYSTEM, buildRecords, failed, judgePrompt, parseVerdicts, selectCandidates } from './shadow'
 import type { JudgeMeta, ShadowTurn } from './shadow'
 

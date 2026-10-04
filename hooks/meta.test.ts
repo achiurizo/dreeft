@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { phaseTotals } from './lib'
+import { phaseTotals } from './turn'
 import { STEP, WITH_PROBE, answerBelow, beneath, complete, drain, measure, probe, stop } from './testkit'
 
 test('step 0 snapshots context; blocks and think time accumulate', WITH_PROBE, async ($, on) => {

@@ -4,8 +4,10 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { CORNER, FOCUS_TERMS, addTerms, bandWidth, width as cells, focusRow, metaRow, phaseTotals, timelineRow, topTerms } from '../hooks/lib'
-import type { Seg, Tone } from '../hooks/lib'
+import { addTerms, topTerms } from '../hooks/focus'
+import { phaseTotals } from '../hooks/turn'
+import { CORNER, FOCUS_TERMS, bandWidth, focusRow, metaRow, timelineRow, width as cells } from '../hooks/rows'
+import type { Seg, Tone } from '../hooks/rows'
 import type { Span, Trail } from '../types'
 
 const OUT = join(import.meta.dir, '..', 'assets')
