@@ -79,6 +79,8 @@ export const register: Register = (on, options) => {
   const palette: Palette = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
   const ink: Record<Tone, Ink> = { faint: { color: 'gray', dimColor: true }, dim: { dimColor: true }, bright: {}, warn: { color: 'yellow' }, ...palette }
   const shadow = options.memoryShadow === 'on' ? createShadow() : null
+  /** What the shadow pass already judged this session. */
+  const seen = new Set<string>()
 
   // Only the shadow pass reads tool results.
   if (shadow) {
@@ -124,7 +126,7 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     const judged = shadow?.complete(e)
     // Unawaited, after the turn settled: the judge never delays or changes the turn.
-    if (judged) void judgeTurn(shadowIo($), judged).catch(err => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' }))
+    if (judged) void judgeTurn(shadowIo($), judged, seen).catch(err => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' }))
     return result
   })
 
