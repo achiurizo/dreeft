@@ -186,7 +186,9 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 | `hooks/focus.ts` | Pure: the focus scan over thinking text and tool arguments |
 | `hooks/turn.ts` | Pure: phase timeline, chunk reducer, context growth |
 | `hooks/rows.ts` | Pure: row layout, braille trail, the band's width and rows |
-| `hooks/shadow.ts` | Memory shadow log: turn buffer, candidate selection, judge prompt and parsing, log records |
+| `hooks/shadow.ts` | Memory shadow log: the turn buffer |
+| `hooks/shadow-candidates.ts` | Memory shadow log: candidate selection and outcome evidence |
+| `hooks/shadow-judge.ts` | Memory shadow log: judge prompt, verdict parsing, log records |
 | `hooks/shadow-io.ts` | Memory shadow log: the judge call and the log append |
 | `types/index.d.ts` | Shape of the mod's session state |
 | `hooks/*.test.ts` | Tests, run with the `claude-code/testing` kit |
