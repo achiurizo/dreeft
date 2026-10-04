@@ -185,6 +185,7 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 | `hooks/register.tsx` | Hooks, state atoms, render |
 | `hooks/lib.ts` | Pure helpers: focus scan, phase timeline, chunk reducer, row layout, braille trail |
 | `hooks/shadow.ts` | Memory shadow log: turn buffer, candidate selection, judge prompt and parsing, log records |
+| `hooks/shadow-io.ts` | Memory shadow log: the judge call and the log append |
 | `types/index.d.ts` | Shape of the mod's session state |
 | `hooks/*.test.ts` | Tests, run with the `claude-code/testing` kit |
 | `scripts/readme-images.ts` | Draws the images in `assets/` from the row builders in `hooks/lib.ts` |
