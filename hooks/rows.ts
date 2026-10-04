@@ -11,7 +11,7 @@ export type Seg = { text: string; tone: Tone }
 /** The turn figures the meta row shows; `thinkMs` in milliseconds. */
 export type Meta = { thinkMs: number; blocks: number; tools: number }
 
-/** The terminal cells a row takes. */
+/** The terminal cells a row takes: every character the band draws is one cell wide (terms are ASCII). */
 export const width = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
 
 /** Milliseconds as whole seconds: `42s`, or `1m5s` from a minute up. */
@@ -182,13 +182,14 @@ export function bandWidth(columns: number): number | null {
 /**
  * The band's rows for a turn, top to bottom: focus, timeline, meta. A band short of rows keeps
  * the bottom ones, the top row stops short of the corner, and a row with nothing to show drops.
- * @param trail - recent turns' growth; a done turn's own growth is already its last entry
+ * @param trail - recent turns' growth; a done turn's own growth is already its last number, and a
+ *   compaction after it belongs to the next turn
  * @param max - width in terminal cells
  * @param maxRows - most rows the band may take
  */
 export function bandRows(t: TurnMeta, trail: Trail, ctx: Ctx | null, max: number, maxRows: number): Seg[][] {
   const growth = t.done ? t.final : growthOf(t, ctx)
-  const history = t.done && t.final !== null ? trail.slice(0, -1) : trail
+  const history = t.done && t.final !== null ? trail.slice(0, Math.max(0, trail.findLastIndex(v => v !== null))) : trail
   const meta = { thinkMs: phaseTotals(t.spans, t.now).think, blocks: t.blocks, tools: t.tools }
   const builders = [
     (cells: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, cells),

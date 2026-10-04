@@ -9,33 +9,46 @@ export const HEDGE = /\b(wait|actually|hmm+)\b/gi
 const TOKEN = /`([^`\n]+)`|[A-Za-z_][\w./-]*\w/g
 const FILE = /\.(tsx?|jsx?|mjs|cjs|json|md|py|rb|go|rs|sh|fish|toml|ya?ml|css|html)$/i
 
-/** A backticked name, path or code identifier as a term: no `()`, a path's last part, 3-40 long. */
+/** What a term may hold: printable ASCII, so each character is one cell and none is a control character. */
+const DRAWABLE = /^[\x20-\x7e]+$/
+
+/**
+ * A backticked name, path or code identifier as a term: no `()`, a path's last part, 3-40 long.
+ * Anything the band cannot draw at a known width is no term: the engine refuses a row holding a
+ * control character, and a wide character would push the row past its measured width.
+ */
 function normTerm(raw: string): string | null {
   let s = raw.trim().replace(/\(\)$/, '')
   if (s.includes('/')) s = s.split('/').filter(Boolean).at(-1) ?? ''
-  const n = Array.from(s).length
-  return n >= 3 && n <= 40 ? s : null
+  return s.length >= 3 && s.length <= 40 && DRAWABLE.test(s) ? s : null
 }
 
-/** Plain words are prose; a file name, a path, camelCase or snake_case is code. */
-const isCode = (w: string) => w.includes('/') || FILE.test(w) || /[a-z][A-Z]/.test(w) || /[A-Za-z]_[A-Za-z]/.test(w)
+/** Plain words are prose; a file name, a path of three parts or more, camelCase or snake_case is code. */
+const isCode = (w: string) => w.split('/').length > 2 || FILE.test(w) || /[a-z][A-Z]/.test(w) || /[A-Za-z]_[A-Za-z]/.test(w)
+
+/** A run of backticks is a fence or an empty span, never the edge of a name. */
+const blankRuns = (s: string) => s.replace(/`{2,}/g, run => ' '.repeat(run.length))
+const isOdd = (s: string) => (s.match(/`/g) ?? []).length % 2 === 1
 
 /**
- * Scan thinking text for terms and second-guesses. Text after the last space, or from an
- * unclosed backtick, is held back as `carry` so a name split across chunks still counts.
+ * Scan thinking text for terms and second-guesses. Text after the last space, or from a backtick
+ * still open on the last line, is held back as `carry` so a name split across chunks still counts.
+ * A name never spans lines, so a fence or a stray backtick holds nothing past its own line; held
+ * text that outgrows `CARRY_MAX` was no name, and is scanned as prose.
  */
 export function scanThought(carry: string, piece: string): { terms: string[]; hedges: number; carry: string } {
-  const text = carry + piece
+  const text = blankRuns(carry + piece)
   let cut = text.search(/\s\S*$/) + 1
-  if ((text.slice(0, cut).match(/`/g) ?? []).length % 2 === 1) cut = text.lastIndexOf('`', cut - 1)
-  const ready = text.slice(0, cut)
-  const rest = text.slice(cut)
+  if (isOdd(text.slice(text.lastIndexOf('\n', cut - 1) + 1, cut))) cut = text.lastIndexOf('`', cut - 1)
+  const held = text.slice(cut)
+  const ready = held.length > CARRY_MAX ? text.replaceAll('`', ' ') : text.slice(0, cut)
+  const rest = held.length > CARRY_MAX ? '' : held
   const terms: string[] = []
   for (const m of ready.matchAll(TOKEN)) {
     const term = m[1] !== undefined ? normTerm(m[1]) : isCode(m[0]) ? normTerm(m[0]) : null
     if (term !== null) terms.push(term)
   }
-  return { terms, hedges: (ready.match(HEDGE) ?? []).length, carry: rest.length > CARRY_MAX ? '' : rest }
+  return { terms, hedges: (ready.match(HEDGE) ?? []).length, carry: rest }
 }
 
 /** Arguments that name the file a tool reads or writes. */
