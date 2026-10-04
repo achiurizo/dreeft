@@ -2,9 +2,8 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { On, SessionContextUsage, TurnStepChunk } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { PROBE, STEP, answerBelow, beneath, complete, drain, measure, probe } from './testkit'
+import { STEP, WITH_PROBE, answerBelow, beneath, complete, drain, measure, probe, stop } from './testkit'
 
-const WITH_PROBE = { plugins: [PROBE] }
 
 /** Stands for the status line's figures beneath the mod. */
 function usageBelow(on: On, context: SessionContextUsage) {
@@ -89,7 +88,7 @@ test('session.start after a done turn starts no ticker', WITH_PROBE, async ($, o
 const CHUNKS: TurnStepChunk[] = [
   { kind: 'thinking', index: 0, text: 'weighing `metaRow`' },
   { kind: 'tool', index: 1, id: 'tu1', name: 'Bash' },
-  { kind: 'stop', stopReason: 'tool_use', usage: { model: 'm', input_tokens: 1, output_tokens: 2, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 } },
+  stop('tool_use', 1, 2),
 ]
 
 test('when every state write throws, steps still pass each chunk through and turn.complete still answers', WITH_PROBE, async ($, on) => {

@@ -1,42 +1,27 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
-import type { Ctx, Phase, TurnMeta } from '../types'
-import { addTerms, enterPhase, focusRow, inputTokens, metaRow, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineRow, toolTerms, topTerms } from './lib'
-import type { Seg, Tone } from './lib'
+import type { Ctx, Phase, Trail, TurnMeta } from '../types'
+import { addTerms, toolTerms } from './focus'
+import { enterPhase, growthOf, inputTokens, newTurn, phaseOfMode, reduceChunk } from './turn'
+import { bandRows, bandWidth } from './rows'
+import type { Seg, Tone } from './rows'
 import { createShadow } from './shadow'
 import { judgeTurn } from './shadow-io'
 import type { ShadowIo } from './shadow-io'
 
 /** How often the ticker advances a running turn, in milliseconds. */
 const TICK_MS = 1000
-/** The widest the band draws, in terminal cells. */
-const MAX_WIDTH = 84
-/** The share of the body's columns the band may take. */
-const WIDTH_SHARE = 0.6
-/** Under this many cells the band draws nothing. */
-const MIN_WIDTH = 12
-/** The most names the focus row shows. */
-const FOCUS_TERMS = 3
-/** Cells the engine's `[-]` collapse mark covers at the band's top-right corner, plus a gap. */
-const CORNER = 4
-
 /** The session's context size, kept current by measures and each step's usage. */
 const ctx = atom({ plugin: 'dreeft', key: 'ctx' } as const, null as Ctx | null)
 /** The current main-loop turn, or the last one until the next starts. */
 const turn = atom({ plugin: 'dreeft', key: 'turn' } as const, null as TurnMeta | null)
 /** Recent main-loop turns' growth, in points of the window, oldest first; null marks a compaction. */
-const trail = atom({ plugin: 'dreeft', key: 'trail' } as const, [] as (number | null)[])
+const trail = atom({ plugin: 'dreeft', key: 'trail' } as const, [] as Trail)
 /** Turns of growth the trail keeps. */
 const TRAIL_MAX = 20
 /** Add one entry to the trail, a turn's growth or a compaction's null, dropping the oldest past `TRAIL_MAX`. */
 const pushTrail = ($: EngineInterface, entry: number | null) => update($, trail, past => [...past, entry].slice(-TRAIL_MAX))
-
-/** Context growth since the turn's step 0, in percentage points of the window. */
-function growthOf(t: TurnMeta | null, c: Ctx | null): number | null {
-  if (!t || !c || t.startTokens === null || t.window <= 0) return null
-  return Math.round(((c.tokens - t.startTokens) / t.window) * 10000) / 100
-}
 
 async function safely(fn: () => Promise<unknown>) {
   try {
@@ -218,26 +203,9 @@ export const register: Register = (on, options) => {
     const t = await read($, turn)
     const turns = await read($, trail) // never `h`: that name is the JSX factory
     const c = await read($, ctx)
-    if (e.surface !== 'terminal' || e.props.hasSurvey || !t) return next(e)
-
-    const width = Math.min(MAX_WIDTH, Math.floor(e.props.bodyColumns * WIDTH_SHARE))
-    if (width < MIN_WIDTH) return next(e)
-
-    const totals = phaseTotals(t.spans, t.now)
-    const growth = t.done ? t.final : growthOf(t, c)
-    // Once done, the turn's own growth is already the trail's last entry.
-    const history = t.done && t.final !== null ? turns.slice(0, -1) : turns
-    const metaFor = (max: number) =>
-      metaRow({ thinkMs: totals.think, blocks: t.blocks, tools: t.tools }, growth, history, max)
-    const builders = [
-      (max: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, max),
-      (max: number) => timelineRow(t.spans, t.started, t.now, max),
-      metaFor,
-    ].slice(-Math.max(1, e.props.maxRows)) // a short band keeps the bottom rows
-    // The top row stops short of the corner the engine's [-] mark covers.
-    const rows: Seg[][] = builders
-      .map((build, i) => (i === 0 ? [...build(width - CORNER), { text: ' '.repeat(CORNER), tone: 'dim' as const }] : build(width)))
-      .filter(row => row.some(seg => seg.text.trim() !== ''))
+    const width = bandWidth(e.props.bodyColumns)
+    if (e.surface !== 'terminal' || e.props.hasSurvey || !t || width === null) return next(e)
+    const rows = bandRows(t, turns, c, width, e.props.maxRows)
 
     const { Box, Text } = $.ui.resolve(e)
     const seg = (part: Seg) => <Text {...ink[part.tone]}>{part.text}</Text>

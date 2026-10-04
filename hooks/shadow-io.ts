@@ -1,12 +1,14 @@
 // Memory shadow mode (experimental): judge a turn's candidate facts and append them to a log.
-// Never writes memory, never stages, never changes the turn. The side of `shadow.ts` that reaches
+// Never writes memory, never stages, never changes the turn. The side of the shadow pass that reaches
 // outside: every engine call goes through a `ShadowIo`, so this file holds no `$` either.
 
 import type { EngineInterface } from 'claude-code'
 
-import { inputTokens } from './lib'
-import { JUDGE_SYSTEM, buildRecords, failed, judgePrompt, parseVerdicts, selectCandidates } from './shadow'
-import type { JudgeMeta, ShadowTurn } from './shadow'
+import { inputTokens } from './turn'
+import type { ShadowTurn } from './shadow'
+import { selectCandidates } from './shadow-candidates'
+import { JUDGE_SYSTEM, buildRecords, failed, judgePrompt, parseVerdicts } from './shadow-judge'
+import type { JudgeMeta } from './shadow-judge'
 
 /** The engine calls the shadow pass makes, handed over by `register.tsx`. */
 export type ShadowIo = {

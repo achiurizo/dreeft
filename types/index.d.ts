@@ -15,6 +15,9 @@ export type Span = { phase: Phase; at: number }
 /** A name the thinking mentions, and how often; the most recently seen last. */
 export type Term = { t: string; n: number }
 
+/** Recent main-loop turns' growth, in points of the window, oldest first; null marks a compaction. */
+export type Trail = (number | null)[]
+
 /** One main-loop turn, from step 0 until the next turn starts. Times are clock milliseconds. */
 export type TurnMeta = {
   /** Thinking blocks so far. */
@@ -47,6 +50,6 @@ export type TurnMeta = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'dreeft': { ctx: Ctx | null; turn: TurnMeta | null; trail: (number | null)[] }
+    'dreeft': { ctx: Ctx | null; turn: TurnMeta | null; trail: Trail }
   }
 }

@@ -4,9 +4,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { addTerms, focusRow, metaRow, phaseTotals, timelineRow, topTerms } from '../hooks/lib'
-import type { Seg, Tone } from '../hooks/lib'
-import type { Span } from '../types'
+import { addTerms, topTerms } from '../hooks/focus'
+import { phaseTotals } from '../hooks/turn'
+import { CORNER, FOCUS_TERMS, bandWidth, focusRow, metaRow, timelineRow, width as cells } from '../hooks/rows'
+import type { Seg, Tone } from '../hooks/rows'
+import type { Span, Trail } from '../types'
 
 const OUT = join(import.meta.dir, '..', 'assets')
 
@@ -36,14 +38,13 @@ const HEDGES = 2
 const META = { thinkMs: phaseTotals(SPANS, END).think, blocks: 2, tools: 3 }
 const GROWTH = 0.6
 /** Earlier turns' growth in points of the window; null is a compaction. */
-const HISTORY: (number | null)[] = [1.2, 0.4, 2.1, 3, 0.8, 1.5, 4.2, 2.6, 3.4, null, 0.3, 0.9, 1.4, 2.2, 2.9, 3.6, 1.1, 1.8, 2.7, 4]
+const HISTORY: Trail = [1.2, 0.4, 2.1, 3, 0.8, 1.5, 4.2, 2.6, 3.4, null, 0.3, 0.9, 1.4, 2.2, 2.9, 3.6, 1.1, 1.8, 2.7, 4]
 
-// The band's layout in a 112-column terminal, as `hooks/register.tsx` computes it.
+// The band's layout in a 112-column terminal.
 const COLUMNS = 112
-const BAND = Math.min(84, Math.floor(COLUMNS * 0.6))
-const CORNER = 4
+const BAND = bandWidth(COLUMNS) ?? 0
 
-const focus = (max: number) => focusRow(topTerms(FOCUS, 3), HEDGES, max)
+const focus = (max: number) => focusRow(topTerms(FOCUS, FOCUS_TERMS), HEDGES, max)
 const timeline = (max: number) => timelineRow(SPANS, START, END, max)
 const meta = (max: number) => metaRow(META, GROWTH, HISTORY, max)
 
@@ -79,7 +80,6 @@ const PAD = 24
 
 const px = (n: number) => String(Math.round(n * 100) / 100)
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-const cells = (segs: Seg[]) => segs.reduce((n, s) => n + Array.from(s.text).length, 0)
 const plain = (segs: Seg[]) => segs.map(s => s.text).join('')
 
 function inkOf(tone: Tone, palette: Palette): string {

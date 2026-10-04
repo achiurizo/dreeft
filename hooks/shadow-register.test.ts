@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { ModelCompleteRequest, On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import type { ShadowRecord } from './shadow'
+import type { ShadowRecord } from './shadow-judge'
 import { STEP, answerBelow, beneath, complete, drain } from './testkit'
 
 const ON = { options: { memoryShadow: 'on' } }
