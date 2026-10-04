@@ -194,4 +194,13 @@ describe('band', () => {
     expect(meta([5, 0.6])).toBe(text(bandRows(turn, [5], ctx, 60, 1)[0] ?? []))
     expect(meta([5, 0.6])).toContain('+0.6%')
   })
+
+  test('bandRows: a compaction after a done turn does not draw the turn twice', () => {
+    const done = { ...turn, done: true, final: 0.6 }
+    const meta = (trail: (number | null)[]) => text(bandRows(done, trail, null, 60, 1)[0] ?? [])
+    expect(meta([5, 0.6, null])).toBe(meta([5, 0.6]))
+    expect(meta([0.6, null])).toBe(meta([0.6]))
+    // A compaction during the turn came before its growth landed: still marked.
+    expect(meta([5, null, 0.6])).toContain('↓')
+  })
 })

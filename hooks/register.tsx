@@ -3,7 +3,7 @@ import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Ctx, Phase, Trail, TurnMeta } from '../types'
 import { addTerms, toolTerms } from './focus'
-import { enterPhase, growthOf, inputTokens, newTurn, phaseOfMode, reduceChunk } from './turn'
+import { FOLDED, enterPhase, growthOf, inputTokens, newTurn, phaseOfMode, reduceChunk } from './turn'
 import { bandRows, bandWidth } from './rows'
 import type { Seg, Tone } from './rows'
 import { createShadow } from './shadow'
@@ -180,7 +180,8 @@ export const register: Register = (on, options) => {
       }
       const chunk = step.value
       shadow?.chunk(e.turnId, chunk)
-      await safely(async () => {
+      // A tool's streamed arguments change nothing in the turn: no clock read, no write, no redraw.
+      if (FOLDED.has(chunk.kind)) await safely(async () => {
         const now = await $.clock.now()
         await update($, turn, t => t && reduceChunk(t, chunk, now))
         if (chunk.kind === 'stop' && chunk.usage) {

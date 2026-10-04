@@ -91,6 +91,24 @@ const CHUNKS: TurnStepChunk[] = [
   stop('tool_use', 1, 2),
 ]
 
+test('a tool\'s streamed arguments cost no state write', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  let writes = 0
+  on('state.set', async (_$, e, next) => {
+    writes++
+    return next(e)
+  })
+  const input: TurnStepChunk[] = Array.from({ length: 50 }, () => ({ kind: 'input', index: 1, json: '{"a":' }))
+  const tool: TurnStepChunk = { kind: 'tool', index: 1, id: 'tu1', name: 'Bash' }
+  beneath(on, [tool], [tool, ...input])
+  await drain($.turn.step(STEP))
+  const without = writes
+  writes = 0
+  await drain($.turn.step(STEP))
+  expect(writes).toBe(without)
+  expect(await probe($)).toMatchObject({ tools: 1 })
+})
+
 test('when every state write throws, steps still pass each chunk through and turn.complete still answers', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)

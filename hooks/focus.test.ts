@@ -25,6 +25,39 @@ describe('scanThought', () => {
     expect(scanThought('', '`' + 'x'.repeat(300)).carry).toBe('')
   })
 
+  test('held text that outgrows the carry is scanned as prose, not lost', () => {
+    const r = scanThought('', `a stray \` then ${'plain words '.repeat(20)}and wait for metaRow here`)
+    expect(r.terms).toEqual(['metaRow'])
+    expect(r.hedges).toBe(1)
+  })
+
+  test('a code fence, however long, never turns the prose after it into names', () => {
+    const fence = `\`\`\`ts\n${'const total = count + 1\n'.repeat(12)}\`\`\`\n`
+    const prose = 'So `metaRow` is where the problem lives so open `rows.ts` and it does not matter finally. '
+    let carry = ''
+    const terms: string[] = []
+    // Streamed in small pieces, as the engine hands thinking over.
+    for (const piece of (fence + prose).match(/[\s\S]{1,7}/g) ?? []) {
+      const r = scanThought(carry, piece)
+      terms.push(...r.terms)
+      carry = r.carry
+    }
+    expect(terms).toEqual(['metaRow', 'rows.ts'])
+  })
+
+  test('a backtick left open at the end of a line holds nothing on the next line', () => {
+    expect(scanThought('', 'a stray ` here\nthen `metaRow` and more ').terms).toEqual(['metaRow'])
+  })
+
+  test('a name the band cannot draw at a known width is no term: control characters, wide characters', () => {
+    expect(scanThought('', '`x\x1b[31mred` `a\rb\tc` `設定ファイル` `naïve_name` `fine` ').terms).toEqual(['fine'])
+    expect(toolTerms({ file_path: '/repo/we\x07ird.ts' })).toEqual([])
+  })
+
+  test('a slash between plain words is prose; a path of three parts is code', () => {
+    expect(scanThought('', 'read/write and client/server, then hooks/lib/rows and src/a.ts ').terms).toEqual(['rows', 'a.ts'])
+  })
+
   test('terms shorter than 3 or longer than 40 characters are skipped', () => {
     expect(scanThought('', '`ab` `' + 'a'.repeat(41) + '` `fine` ').terms).toEqual(['fine'])
   })

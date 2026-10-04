@@ -92,6 +92,9 @@ function flush(t: TurnMeta): TurnMeta {
   return { ...t, focus: addTerms(t.focus, scan.terms), hedges: t.hedges + scan.hedges, carry: '' }
 }
 
+/** The chunk kinds `reduceChunk` folds; any other kind leaves the turn as it was. */
+export const FOLDED: ReadonlySet<TurnStepChunk['kind']> = new Set(['thinking', 'text', 'tool', 'stop'])
+
 /** Fold one main-loop chunk into the turn. */
 export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): TurnMeta {
   switch (chunk.kind) {
