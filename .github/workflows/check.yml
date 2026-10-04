@@ -11,9 +11,11 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # `claude -p x` below is expected to fail fast with no auth; a hang must not run to the 6 hour default.
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       # Mods need 2.1.287+; bump the pin to pick up engine type changes.
@@ -26,4 +28,9 @@ jobs:
       # before the login check, so this fails with no auth but leaves the types behind.
       - run: claude -p x --plugin-dir . || true
       - run: test -f .claude-plugin/types/tsconfig.json
-      - run: npx -y -p typescript tsc -p .
+      # Pinned: the tsconfig is engine-generated, so a new TypeScript default must not turn main red.
+      - run: npx -y -p typescript@7.0.2 tsc -p .
+      # tsc does not cover scripts/. Redrawing the README images runs the script against the row
+      # builders, and a diff means the committed images no longer show what the band draws.
+      - run: npx -y bun@1.4.2 scripts/readme-images.ts
+      - run: git diff --exit-code assets/

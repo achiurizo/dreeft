@@ -18,7 +18,7 @@ The transcript already shows the thinking itself. dreeft is a Claude Code mod th
 - **Timeline**: where the turn's time goes.
 - **Meta**: what the turn costs.
 
-No model calls, no network requests, no file writes. The band appears when a turn starts and stays up after it ends, until the next turn starts.
+By default: no model calls, no network requests, no file writes. Only the opt-in [memory shadow log](#memory-shadow-log-experimental) makes any. The band appears when a turn starts and stays up after it ends, until the next turn starts.
 
 ## Install
 
@@ -201,15 +201,16 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 ## Development
 
 ```sh
-claude plugin test .                                  # run the tests
-claude plugin validate .claude-plugin/plugin.json     # check manifest, hooks and declared state
-npx -p typescript tsc -p .                            # type-check
-bun scripts/readme-images.ts                          # redraw the README images
+claude plugin test .                                           # run the tests
+claude plugin validate --strict .claude-plugin/plugin.json     # check manifest, hooks and declared state
+claude plugin validate --strict .claude-plugin/marketplace.json
+npx -p typescript@7.0.2 tsc -p .                               # type-check
+bun scripts/readme-images.ts                                   # redraw the README images
 ```
 
 Type-checking needs `.claude-plugin/types/`. Claude Code writes that folder each time a session loads the mod from a local folder, such as with `--plugin-dir`. The folder is gitignored, so a fresh clone can't type-check until you start Claude Code once with `claude --plugin-dir .`. A marketplace install does not write it.
 
-CI runs the first three checks on every pull request.
+CI runs all of these on every pull request, and fails when redrawing the images changes anything in `assets/`.
 
 The images in this README are drawn by `scripts/readme-images.ts` from the same row builders the band uses, fed one scripted turn. They are not screenshots. Redraw them after a change to a row's layout.
 
