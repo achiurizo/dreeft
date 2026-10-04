@@ -155,8 +155,10 @@ With `memoryShadow` set to `on`, after each main-loop turn that was not interrup
    - **hedge**: the sentence after a "wait", "actually" or "hmm" that states something, not a plan or a question.
    - **focus**: a name the turn came back to at least twice, with the thinking sentences that mention it.
 2. Each candidate gets outcome evidence from the same turn: the last successful tool result that names it, else the sentence of the answer that names it. A candidate with no evidence is still logged, with `confirmed: false`.
-3. One Haiku 4.5 call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
+3. One Haiku call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
 4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`: time, session, turn, project, candidate source, span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`), and for a keep the fact, memory type and name, topic, keywords and importance. Each line also records the judge call's token usage.
+5. Spans and evidence quote your session, so anything shaped like a credential (a `SECRET=` or `token:` value, a URL password, a known key prefix) is replaced with `[redacted]` before the judge call and the log. The match is by pattern and can miss a secret in an unusual shape. The log directory is created owner-only (`700`).
+6. A name or span already judged in the session is not judged again.
 
 Read the kept facts:
 

@@ -14,6 +14,22 @@ describe('parseVerdicts', () => {
     expect(parseVerdicts('no', 1)[0]).toMatchObject({ verdict: 'error', reason: 'judge reply was not JSON' })
     expect(parseVerdicts('{"verdicts":[{"i":0,"verdict":"keep"}]}', 1)[0]).toMatchObject({ verdict: 'error' })
   })
+  test('a brace in the prose before the JSON does not lose the verdicts', () => {
+    const reply = 'Using the {i, verdict} shape:\n{"verdicts":[{"i":0,"verdict":"drop","reason":"plan"}]}'
+    expect(parseVerdicts(reply, 1)[0]).toMatchObject({ verdict: 'drop', reason: 'plan' })
+  })
+  test('a reply cut short keeps its complete verdicts; only the cut one is an error', () => {
+    const reply = '{"verdicts":[{"i":0,"verdict":"drop","reason":"status"},{"i":1,"verdict":"keep","fact":"dreeft: the lo'
+    const [whole, cut] = parseVerdicts(reply, 2)
+    expect(whole).toMatchObject({ verdict: 'drop', reason: 'status' })
+    expect(cut).toMatchObject({ verdict: 'error', reason: 'judge gave no verdict' })
+  })
+  test('a topic with nothing usable is null; a keyword is one bounded line', () => {
+    const reply = JSON.stringify({ verdicts: [{ i: 0, verdict: 'keep', fact: 'dreeft: f.', topic: '!!!', keywords: ['tool.call', ' a\nb ', 'x'.repeat(200), '', 7], reason: 'r' }] })
+    const [v] = parseVerdicts(reply, 1)
+    expect(v?.topic).toBeNull()
+    expect(v?.keywords).toEqual(['tool.call', 'a b', 'x'.repeat(40)])
+  })
 })
 
 describe('records', () => {

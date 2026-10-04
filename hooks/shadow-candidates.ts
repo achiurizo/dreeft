@@ -24,13 +24,28 @@ const CANDIDATE_MAX = 6
 /** A corrected belief says something: fewer words after the marker is a stall, not a claim. */
 const MIN_WORDS = 6
 
+/** How far past a marker a hedge span is read: its two sentences are clipped to `SPAN_MAX` anyway. */
+const HEDGE_WINDOW = SPAN_MAX * 4
+
 const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1)}…`)
 const squash = (s: string) => s.replace(/\s+/g, ' ').trim()
 
-/** Sentences of `text`, each with its start offset; a newline also ends one, a dot inside `foo.ts` does not. */
+/** Secret shapes a tool result or a thought can carry; the log and the judge never see them. */
+const SECRETS: [RegExp, string][] = [
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[redacted]'],
+  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+(?::[^\s/]*)?@/gi, '$1[redacted]@'],
+  [/\b([\w.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]'],
+  [/\b((?:bearer|basic)\s+)[\w.~+/=-]{8,}/gi, '$1[redacted]'],
+  [/\b(?:sk|pk|rk)[-_](?:live|test|ant|proj)[-_][\w-]{8,}|\bsk-[\w-]{20,}|\bgh[pousr]_\w{20,}|\bgithub_pat_\w{20,}|\bxox[abprs]-[\w-]{10,}|\bAKIA[0-9A-Z]{16}\b|\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/g, '[redacted]'],
+]
+
+/** `text` with anything shaped like a credential replaced by `[redacted]`. */
+export const redact = (text: string) => SECRETS.reduce((s, [re, to]) => s.replace(re, to), text)
+
+/** Sentences of `text`, each with its start offset; a newline also ends one, a dot inside `foo.ts` or `../a` does not. */
 function sentences(text: string): { at: number; s: string }[] {
   const out: { at: number; s: string }[] = []
-  const re = /(?:[^.!?\n]|[.!?](?=[^\s.!?]))+(?:[.!?]+(?=\s|$)|\n+|$)/g
+  const re = /(?:[^.!?\n]|[.!?]+(?=[^\s.!?]))+(?:[.!?]+(?=\s|$)|\n+|$)/g
   for (const m of text.matchAll(re)) {
     const s = m[0].trim()
     if (s !== '') out.push({ at: m.index + m[0].length - m[0].trimStart().length, s })
@@ -42,23 +57,25 @@ function sentences(text: string): { at: number; s: string }[] {
 const PLAN = /^[\s,.:;!-]*(let me|let's|i'll|i will|i need|i should|i want|i'm going|now|ok(ay)?\b|so\b)/i
 
 /**
- * Hedge-then-correction spans: from a second-guess marker through the end of the next sentence,
- * kept when what follows the marker is a statement of at least `MIN_WORDS` words, not a plan or
- * a question.
+ * Hedge-then-correction spans, the first `HEDGE_MAX`: from a second-guess marker through the end
+ * of the next sentence, kept when what follows the marker is a statement of at least `MIN_WORDS`
+ * words, not a plan or a question.
  */
 export function hedgeSpans(thinking: string): string[] {
   const out: string[] = []
   let end = -1
   for (const m of thinking.matchAll(HEDGE)) {
+    if (out.length >= HEDGE_MAX) break
     if (m.index < end) continue // inside the previous span
-    const rest = thinking.slice(m.index + m[0].length)
+    const from = m.index + m[0].length
+    const rest = thinking.slice(from, from + HEDGE_WINDOW)
     const parts = sentences(rest).slice(0, 2)
     const first = parts[0]?.s ?? ''
     if (PLAN.test(first) || first.endsWith('?')) continue
     if (first.split(/\s+/).filter(Boolean).length < MIN_WORDS) continue
     const last = parts.at(-1)
-    end = m.index + m[0].length + (last ? last.at + last.s.length : 0)
-    out.push(clip(squash(thinking.slice(m.index, end)), SPAN_MAX))
+    end = from + (last ? last.at + last.s.length : 0)
+    out.push(clip(squash(redact(thinking.slice(m.index, end))), SPAN_MAX))
   }
   return out
 }
@@ -91,28 +108,35 @@ export function findEvidence(turn: ShadowTurn, terms: string[]): Evidence | null
   for (const u of [...turn.tools].reverse()) {
     if (u.isError) continue
     const hit = terms.find(t => u.terms.includes(t) || u.text.includes(t))
-    if (hit !== undefined && u.text.trim() !== '') return { from: 'tool', tool: u.name, snippet: around(u.text, u.text.includes(hit) ? hit : null) }
+    if (hit === undefined || u.text.trim() === '') continue
+    // Redacted before the cut, so a secret the cut would split is still recognised whole.
+    const text = redact(u.text)
+    return { from: 'tool', tool: u.name, snippet: around(text, text.includes(hit) ? hit : null) }
   }
   const said = sentences(turn.text).find(p => terms.some(t => p.s.includes(t)))
-  return said ? { from: 'text', snippet: clip(squash(said.s), SNIPPET_MAX) } : null
+  return said ? { from: 'text', snippet: clip(squash(redact(said.s)), SNIPPET_MAX) } : null
 }
 
-/** Thinking sentences that name `term`, the last two joined, clipped to `SPAN_MAX`. */
-function mentions(thinking: string, term: string): string {
-  const hits = sentences(thinking).filter(p => p.s.includes(term)).slice(-2)
-  return clip(squash(hits.map(p => p.s).join(' … ')), SPAN_MAX)
+/** The sentences that name `term`, the last two joined, clipped to `SPAN_MAX`. */
+function mentions(thought: { s: string }[], term: string): string {
+  const hits = thought.filter(p => p.s.includes(term)).slice(-2)
+  return clip(squash(redact(hits.map(p => p.s).join(' … '))), SPAN_MAX)
 }
 
-/** The turn's candidates: hedge spans first, then repeated names the thinking discussed. */
+/**
+ * The turn's candidates: hedge spans first, then repeated names the thinking discussed. A name
+ * whose mentions a hedge span already holds is not judged twice.
+ */
 export function selectCandidates(turn: ShadowTurn): Candidate[] {
   const hedges: Candidate[] = hedgeSpans(turn.thinking)
-    .slice(0, HEDGE_MAX)
     .map(span => ({ source: 'hedge', span, evidence: findEvidence(turn, scanThought('', `${span} `).terms) }))
   const focus: Candidate[] = []
+  const thought = sentences(turn.thinking)
   for (const { t } of repeatedTerms(turn)) {
     if (focus.length >= FOCUS_CANDIDATES) break
-    const span = mentions(turn.thinking, t)
+    const span = mentions(thought, t)
     if (span === '') continue // only tool calls named it: no belief to judge
+    if (hedges.some(h => h.span.includes(span))) continue
     focus.push({ source: 'focus', term: t, span, evidence: findEvidence(turn, [t]) })
   }
   return [...hedges, ...focus].slice(0, CANDIDATE_MAX)
