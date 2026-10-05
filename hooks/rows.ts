@@ -2,7 +2,7 @@
 
 import type { Ctx, Phase, Span, Term, Trail, TurnMeta } from '../types'
 import { topTerms } from './focus'
-import { growthOf, phaseTotals, timelineCells } from './turn'
+import { cellsAt, growthOf, phaseTotals, timelineCells } from './turn'
 
 /** How a segment is drawn: `faint` and `dim` recede, `warn` is amber, `think` and `tool` follow the palette. */
 export type Tone = 'faint' | 'dim' | 'bright' | 'warn' | 'think' | 'tool'
@@ -24,6 +24,8 @@ export function formatSecs(ms: number): string {
 const GLYPH: Record<Phase, string> = { wait: ' ', think: '▀', tool: '▄', write: '█' }
 /** Closes the strip, so trailing blank (waiting) cells still read as time. */
 const CAP = '▕'
+/** A steering nudge sent to the model: in the strip at the second it was sent, and before the count in the meta row. */
+const NUDGE = '▲'
 const TONE: Record<Phase, Tone> = { wait: 'faint', think: 'think', tool: 'tool', write: 'bright' }
 const TOTALS: [Phase, string][] = [
   ['think', 'think'],
@@ -37,8 +39,9 @@ const MIN_STRIP = 8
  * @param start - clock time of the turn's start, in milliseconds
  * @param end - clock time the strip runs to, in milliseconds
  * @param max - width in terminal cells
+ * @param nudges - clock times of the nudges sent this turn; each marks its cell in amber, over the phase
  */
-export function timelineRow(spans: Span[], start: number, end: number, max: number): Seg[] {
+export function timelineRow(spans: Span[], start: number, end: number, max: number, nudges: readonly number[] = []): Seg[] {
   const sums = phaseTotals(spans, end)
   const totals: Seg[] = []
   for (const [phase, label] of TOTALS) {
@@ -48,13 +51,17 @@ export function timelineRow(spans: Span[], start: number, end: number, max: numb
   }
   const room = max - width(totals)
   const fits = room >= MIN_STRIP
-  const cells = timelineCells(spans, start, end, (fits ? room : max) - CAP.length)
+  const most = (fits ? room : max) - CAP.length
+  const cells = timelineCells(spans, start, end, most)
+  // The same cell arithmetic as the strip, so a compressed cell that holds a nudge shows it.
+  const marked = nudges.length > 0 ? cellsAt(nudges, start, end, most) : null
   const strip: Seg[] = []
-  for (const c of cells) {
+  cells.forEach((c, k) => {
+    const cell: Seg = marked?.has(k) ? { text: NUDGE, tone: 'warn' } : { text: GLYPH[c], tone: TONE[c] }
     const last = strip.at(-1)
-    if (last && last.tone === TONE[c]) last.text += GLYPH[c]
-    else strip.push({ text: GLYPH[c], tone: TONE[c] })
-  }
+    if (last && last.tone === cell.tone) last.text += cell.text
+    else strip.push(cell)
+  })
   strip.push({ text: CAP, tone: 'dim' })
   return fits ? [...strip, ...totals] : strip
 }
@@ -143,15 +150,17 @@ export function formatGrowth(points: number): string {
 }
 
 /**
- * Meta row, fitted to `max` cells: drop the tool count, the trail, then the whole row.
+ * Meta row, fitted to `max` cells: drop the tool count, the trail, the nudge count, then the whole row.
  * @param growth - this turn's growth in points of the window, or null when unmeasured
  * @param history - earlier turns' growth in points, oldest first; null marks a compaction
+ * @param nudges - steering nudges sent to the model this turn; 0 draws nothing
  */
-export function metaRow(meta: Meta, growth: number | null, history: Trail, max: number): Seg[] {
-  const head = `◆ ${formatSecs(meta.thinkMs)} · ${meta.blocks} blk`
-  const tools = ` · ${meta.tools} ${meta.tools === 1 ? 'tool' : 'tools'}`
+export function metaRow(meta: Meta, growth: number | null, history: Trail, max: number, nudges = 0): Seg[] {
+  const head: Seg = { text: `◆ ${formatSecs(meta.thinkMs)} · ${meta.blocks} blk`, tone: 'dim' }
+  const full: Seg = { text: `${head.text} · ${meta.tools} ${meta.tools === 1 ? 'tool' : 'tools'}`, tone: 'dim' }
+  const n: Seg[] = nudges > 0 ? [{ text: ' · ', tone: 'dim' }, { text: `${NUDGE} ${nudges}`, tone: 'warn' }] : []
   if (growth === null) {
-    const plain = [head + tools, head].map(text => [{ text, tone: 'dim' as Tone }])
+    const plain: Seg[][] = [[full, ...n], [head, ...n], [head]]
     return plain.find(c => width(c) <= max) ?? []
   }
   const drawn = formatGrowth(growth)
@@ -161,9 +170,10 @@ export function metaRow(meta: Meta, growth: number | null, history: Trail, max: 
   const trail = growthTrail(history, growth, TRAIL_CELLS)
   const t: Seg[] = [{ text: ' ', tone: 'dim' }, ...trail.past, { text: trail.now, tone }]
   const candidates: Seg[][] = [
-    [{ text: head + tools, tone: 'dim' }, ...g, ...t],
-    [{ text: head, tone: 'dim' }, ...g, ...t],
-    [{ text: head, tone: 'dim' }, ...g],
+    [full, ...n, ...g, ...t],
+    [head, ...n, ...g, ...t],
+    [head, ...n, ...g],
+    [head, ...g],
   ]
   return candidates.find(c => width(c) <= max) ?? []
 }
@@ -199,10 +209,12 @@ export function bandRows(t: TurnMeta, trail: Trail, ctx: Ctx | null, max: number
   const growth = t.done ? t.final : growthOf(t, ctx)
   const history = t.done && t.final !== null ? trail.slice(0, Math.max(0, trail.findLastIndex(v => v !== null))) : trail
   const meta = { thinkMs: phaseTotals(t.spans, t.now).think, blocks: t.blocks, tools: t.tools }
+  // A turn kept by an older version of the mod has no such field.
+  const nudges = t.nudges ?? []
   const all = [
     (cells: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, cells),
-    (cells: number) => timelineRow(t.spans, t.started, t.now, cells),
-    (cells: number) => metaRow(meta, growth, history, cells),
+    (cells: number) => timelineRow(t.spans, t.started, t.now, cells, nudges),
+    (cells: number) => metaRow(meta, growth, history, cells, nudges.length),
   ]
   // `slice(-0)` keeps every row, so no rows is its own case.
   const builders = maxRows < 1 ? [] : all.slice(-maxRows)

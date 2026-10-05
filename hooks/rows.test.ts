@@ -228,3 +228,95 @@ describe('band', () => {
     expect(meta([5, null, 0.6])).toContain('↓')
   })
 })
+
+describe('nudges', () => {
+  /** A 10s turn: thinking for 4s, then tools. */
+  const spans = [{ phase: 'think' as const, at: 0 }, { phase: 'tool' as const, at: 4000 }]
+  const meta = { thinkMs: 12_300, blocks: 3, tools: 4 }
+
+  test('timelineRow: a fired nudge marks the second it fired, one cell wide, in amber', () => {
+    const row = timelineRow(spans, 0, 10_000, 60, [6200])
+    expect(text(row).startsWith('▀▀▀▀▄▄▲▄▄▄▕')).toBe(true)
+    expect(row.filter(s => s.tone === 'warn')).toEqual([{ text: '▲', tone: 'warn' }])
+    expect(width(row)).toBe(width(timelineRow(spans, 0, 10_000, 60)))
+  })
+
+  test('timelineRow: with no nudge the row is what it was', () => {
+    expect(timelineRow(spans, 0, 10_000, 60, [])).toEqual(timelineRow(spans, 0, 10_000, 60))
+  })
+
+  test('timelineRow: a nudge at the turn\'s last instant marks the last cell, not one past it', () => {
+    expect(text(timelineRow(spans, 0, 10_000, 60, [10_000])).startsWith('▀▀▀▀▄▄▄▄▄▲▕')).toBe(true)
+  })
+
+  test('timelineRow: a nudge with a clock time outside the turn stays inside the strip', () => {
+    expect(text(timelineRow(spans, 0, 10_000, 60, [-5000, 99_000])).startsWith('▲▀▀▀▄▄▄▄▄▲▕')).toBe(true)
+  })
+
+  test('timelineRow: the mark survives compression, in the cell that holds its second', () => {
+    // 100s on a 12-cell band: 11 strip cells of 10s each, and the nudge at 57s is in the sixth.
+    const long = [{ phase: 'think' as const, at: 0 }, { phase: 'tool' as const, at: 40_000 }]
+    const row = timelineRow(long, 0, 100_000, 12, [57_000])
+    expect(text(row)).toBe('▀▀▀▀▄▲▄▄▄▄▕')
+    expect(row.find(s => s.text === '▲')?.tone).toBe('warn')
+    expect(width(row)).toBeLessThanOrEqual(12)
+  })
+
+  test('timelineRow: two nudges in one compressed cell draw one mark', () => {
+    const long = [{ phase: 'tool' as const, at: 0 }]
+    expect(text(timelineRow(long, 0, 100_000, 12, [51_000, 58_000]))).toBe('▄▄▄▄▄▲▄▄▄▄▕')
+  })
+
+  test('metaRow: fired nudges are counted in amber after the tool count', () => {
+    const row = metaRow(meta, 12, [1, 2], 60, 1)
+    expect(text(row).startsWith('◆ 12s · 3 blk · 4 tools · ▲ 1   +12% ')).toBe(true)
+    expect(row).toContainEqual({ text: '▲ 1', tone: 'warn' })
+  })
+
+  test('metaRow: with no nudge the row is what it was', () => {
+    for (const max of [12, 25, 40, 60]) expect(metaRow(meta, 12, [1, 2], max, 0)).toEqual(metaRow(meta, 12, [1, 2], max))
+    expect(metaRow(meta, null, [], 60, 0)).toEqual(metaRow(meta, null, [], 60))
+  })
+
+  test('metaRow: drops the tool count, then the trail, then the nudge count, then everything', () => {
+    expect(text(metaRow(meta, 12, [], 47, 2))).toMatch(/^◆ 12s · 3 blk · 4 tools · ▲ 2   \+12% \S+$/)
+    expect(text(metaRow(meta, 12, [], 46, 2))).toMatch(/^◆ 12s · 3 blk · ▲ 2   \+12% \S+$/)
+    expect(text(metaRow(meta, 12, [], 37, 2))).toMatch(/^◆ 12s · 3 blk · ▲ 2   \+12% \S+$/)
+    expect(text(metaRow(meta, 12, [], 36, 2))).toBe('◆ 12s · 3 blk · ▲ 2   +12%')
+    expect(text(metaRow(meta, 12, [], 26, 2))).toBe('◆ 12s · 3 blk · ▲ 2   +12%')
+    expect(text(metaRow(meta, 12, [], 25, 2))).toBe('◆ 12s · 3 blk   +12%')
+    expect(text(metaRow(meta, 12, [], 20, 2))).toBe('◆ 12s · 3 blk   +12%')
+    expect(metaRow(meta, 12, [], 19, 2)).toEqual([])
+  })
+
+  test('metaRow: every width from 0 up fits, nudge count or not', () => {
+    for (let max = 0; max <= 60; max++) expect(width(metaRow(meta, 12, [3, null, 9], max, 2))).toBeLessThanOrEqual(max)
+  })
+
+  test('metaRow: with growth unmeasured the nudge count drops after the tool count', () => {
+    expect(text(metaRow(meta, null, [], 60, 1))).toBe('◆ 12s · 3 blk · 4 tools · ▲ 1')
+    expect(text(metaRow(meta, null, [], 28, 1))).toBe('◆ 12s · 3 blk · ▲ 1')
+    expect(text(metaRow(meta, null, [], 18, 1))).toBe('◆ 12s · 3 blk')
+  })
+
+  /** A turn at +12 points that fired one nudge at 1s. */
+  const nudged: TurnMeta = { ...newTurn(0, 100_000, 1_000_000), now: 2000, spans: [{ phase: 'tool', at: 0 }], nudges: [1000], triggers: 1 }
+  const grown = { tokens: 220_000, window: 1_000_000, lastInput: null }
+
+  test('bandRows: a nudged turn shows the mark in the timeline and the count in the meta row', () => {
+    const rows = bandRows(nudged, [], grown, 60, 10).map(text)
+    expect(rows[1]?.startsWith('▄▲▕')).toBe(true)
+    expect(rows[2]?.startsWith('◆ 0s · 0 blk · 0 tools · ▲ 1   +12%')).toBe(true)
+  })
+
+  test('bandRows: on a 12-cell band a nudged turn keeps the mark and every row fits', () => {
+    const rows = bandRows(nudged, [], grown, 12, 10)
+    expect(rows.map(text)).toEqual(['∴ …    ', '▄▲▕'])
+    for (const row of rows) expect(width(row)).toBeLessThanOrEqual(12)
+  })
+
+  test('bandRows: a turn written before nudges were kept draws as a turn without any', () => {
+    const { nudges: _nudges, triggers: _triggers, ...old } = nudged
+    expect(bandRows(old, [], grown, 60, 10)).toEqual(bandRows({ ...nudged, nudges: [] }, [], grown, 60, 10))
+  })
+})

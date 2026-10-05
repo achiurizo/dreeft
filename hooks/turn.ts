@@ -40,14 +40,34 @@ function phasesIn(spans: Span[], from: number, to: number, end: number): Set<Pha
  * @param maxCells - most cells the strip may take
  */
 export function timelineCells(spans: Span[], start: number, end: number, maxCells: number): Phase[] {
-  const dur = Math.max(0, end - start)
-  const cellMs = 1000 * Math.max(1, Math.ceil(Math.ceil(dur / 1000) / Math.max(1, maxCells)))
+  const cellMs = cellSpan(start, end, maxCells)
   // At least one cell, so the row is there from the turn's first moment.
-  return Array.from({ length: Math.max(1, Math.ceil(dur / cellMs)) }, (_, k) => {
+  return Array.from({ length: cellCount(start, end, cellMs) }, (_, k) => {
     const from = start + k * cellMs
     const seen = phasesIn(spans, from, from + cellMs, end)
     return RANK.find(p => seen.has(p)) ?? phaseAt(spans, from)
   })
+}
+
+/** Milliseconds one cell of the strip covers: a second, or whole seconds once the turn outgrows `maxCells`. */
+function cellSpan(start: number, end: number, maxCells: number): number {
+  return 1000 * Math.max(1, Math.ceil(Math.ceil(Math.max(0, end - start) / 1000) / Math.max(1, maxCells)))
+}
+
+/** Cells the strip takes at `cellMs` a cell, at least one. */
+function cellCount(start: number, end: number, cellMs: number): number {
+  return Math.max(1, Math.ceil(Math.max(0, end - start) / cellMs))
+}
+
+/**
+ * The strip cells that hold a clock time in `times`, as indexes into `timelineCells` of the same turn and
+ * width. A time outside the turn takes the nearest cell, so a mark is never lost off either end.
+ * @param times - clock times, in milliseconds
+ */
+export function cellsAt(times: readonly number[], start: number, end: number, maxCells: number): Set<number> {
+  const cellMs = cellSpan(start, end, maxCells)
+  const last = cellCount(start, end, cellMs) - 1
+  return new Set(times.map(at => Math.max(0, Math.min(last, Math.floor((at - start) / cellMs)))))
 }
 
 /** The spinner's own word for what the turn is doing, as a phase; a tool call streaming in (`tool-input`) is the model writing. */
@@ -77,6 +97,8 @@ export function newTurn(started: number, startTokens: number | null, window: num
     carry: '',
     tail: '',
     lastChunk: null,
+    nudges: [],
+    triggers: 0,
   }
 }
 

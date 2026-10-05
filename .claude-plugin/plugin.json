@@ -49,6 +49,17 @@
         "off",
         "on"
       ]
+    },
+    "steer": {
+      "type": "string",
+      "title": "Steering (experimental)",
+      "description": "Changes what the model reads. When a turn has grown the context by 10 points of the window, and again at 20, a coin flip picks fire or hold. shadow: every trigger holds; each is appended to ~/.local/state/dreeft/steer.jsonl and nothing is sent. on: a fire also appends one hidden two-sentence note to the conversation, which the model reads, and a visible notice of it; both arms are logged. off sends and writes nothing.",
+      "default": "off",
+      "options": [
+        "off",
+        "shadow",
+        "on"
+      ]
     }
   }
 }

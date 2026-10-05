@@ -186,3 +186,35 @@ test('when state writes start failing mid-turn, session.start and session.compac
   expect(await probe($)).toEqual(before)
   expect(await probe($, 'trail')).toBeNull()
 })
+
+test('with steer on and the coin firing, a session.append that throws leaves every chunk, the step result and turn.complete unchanged', { options: { steer: 'on' }, plugins: WITH_PROBE.plugins }, async ($, on) => {
+  mock.clock(on)
+  mock.env(on, { HOME: '/home/u' })
+  answerBelow(on)
+  const logged: string[] = []
+  on('ui.log', async (_$, e) => {
+    logged.push(e.text)
+    return { value: undefined }
+  })
+  // `steer.test.ts` pins this session's coin for turn t1 at 10 points on the firing side.
+  on('session.id', async () => ({ value: 's7' }))
+  on('process.run', async () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  // Nothing answers `session.append`: the kit has no conversation, so the mod's append rejects.
+  const chunks: TurnStepChunk[] = [{ kind: 'tool', index: 0, id: 'tu1', name: 'Read' }, stop('tool_use', 220_000, 0)]
+  const toolUses = [{ name: 'Read', input: { file_path: '/repo/hooks/lib.ts' } }]
+  beneath(on, { chunks, toolUses })
+  await measure($, 100_000, 1_000_000)
+  const out: TurnStepChunk[] = []
+  const stream = $.turn.step(STEP)
+  let step = await stream.next()
+  while (!step.done) {
+    out.push(step.value)
+    step = await stream.next()
+  }
+  expect(out).toEqual(chunks)
+  expect(step.value).toEqual({ turnId: 't1', index: 0, answer: '', toolUses, stopReason: 'end_turn', usage: null })
+  expect(await complete($, { answer: 'Done.' })).toEqual({ text: 'Done.' })
+  expect(logged).toEqual([expect.stringContaining('steer: the user row was not appended')])
+  // The band's turn went on as any other: the tool phase, the growth, no nudge.
+  expect(await probe($)).toMatchObject({ done: true, final: 12, nudges: [], triggers: 1 })
+})

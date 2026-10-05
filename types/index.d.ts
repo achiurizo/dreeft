@@ -48,6 +48,10 @@ export type TurnMeta = {
   tail: string
   /** The kind of the last chunk this step, to tell a new thinking block from more of one. */
   lastChunk: 'thinking' | 'text' | 'tool' | 'stop' | null
+  /** Clock times of the steering nudges sent to the model this turn; the band marks each and counts them. Absent on a turn an older version of the mod wrote: read as none. */
+  nudges?: number[]
+  /** Steering triggers this turn, sent or held: the turn's cap of two outlives a reload. Absent on a turn an older version of the mod wrote: read as 0. */
+  triggers?: number
 }
 
 declare module 'claude-code' {
