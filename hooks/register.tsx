@@ -31,6 +31,15 @@ async function safely(fn: () => Promise<unknown>) {
   }
 }
 
+/** `safely()` for synchronous work: what `fn` returned, or undefined when it threw. */
+function attempt<T>(fn: () => T): T | undefined {
+  try {
+    return fn()
+  } catch {
+    return undefined
+  }
+}
+
 // One ticker while a main-loop turn runs, so the timeline grows between steps too (tools run there).
 let ticker: Timer | undefined
 /** The phase the spinner last drew, applied on the next tick; null until it draws this turn. */
@@ -86,7 +95,7 @@ export const register: Register = (on, options) => {
   if (shadow) {
     on('tool.call', async (_$, e, next) => {
       const result = await next(e)
-      if (e.agentId === undefined) shadow.tool(e, result)
+      if (e.agentId === undefined) attempt(() => shadow.tool(e, result))
       return result
     })
   }
@@ -124,7 +133,7 @@ export const register: Register = (on, options) => {
       await update($, turn, x => x && { ...x, done: true, final: g, now })
     })
     const result = await next(e)
-    const judged = shadow?.complete(e)
+    const judged = attempt(() => shadow?.complete(e))
     // Unawaited, after the turn settled: the judge never delays or changes the turn.
     if (judged) void judgeTurn(shadowIo($), judged, seen).catch(err => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' }))
     return result
@@ -141,7 +150,7 @@ export const register: Register = (on, options) => {
 
   on('turn.step', async function* ($, e, next) {
     if (e.agentId !== undefined) return yield* next(e)
-    shadow?.step(e)
+    attempt(() => shadow?.step(e))
 
     if (e.index === 0) {
       // Nothing measured since load: seed from the status line's figures, apart so a failure here
@@ -174,12 +183,12 @@ export const register: Register = (on, options) => {
       const step = await stream.next()
       if (step.done) {
         // The step's tool calls name what the turn touches, even when no thinking text streams.
-        const terms = step.value.toolUses.flatMap(u => toolTerms(u.input))
+        const terms = step.value.toolUses.flatMap(u => attempt(() => toolTerms(u.input)) ?? [])
         if (terms.length > 0) await safely(() => update($, turn, t => t && { ...t, focus: addTerms(t.focus, terms) }))
         return step.value
       }
       const chunk = step.value
-      shadow?.chunk(e.turnId, chunk)
+      attempt(() => shadow?.chunk(e.turnId, chunk))
       // A tool's streamed arguments change nothing in the turn: no clock read, no write, no redraw.
       if (FOLDED.has(chunk.kind)) await safely(async () => {
         const now = await $.clock.now()
