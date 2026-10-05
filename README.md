@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-dark.svg">
+  <img src="assets/logo-light.svg" width="96" height="96" alt="dreeft logo: a wave of braille dots drifting above a terminal prompt">
+</picture>
+
 # dreeft
 
 **Catch the drift of your Claude Code session's thinking, right above the prompt.**
