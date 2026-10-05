@@ -153,7 +153,7 @@ A spike that measures whether the session's thinking holds durable facts worth k
 <details>
 <summary>What it logs, and how to read it</summary>
 
-With `memoryShadow` set to `on`, the mod does three things it never does otherwise. It sends quoted thinking, quoted tool output or answer text, and the repo's `origin` URL without its credentials, query string or fragment (the repo's directory name when there is no `origin`) to the model provider, on your account. It runs `git` to find the repo and `sh` to append to the log. It writes the log file. The append needs `/bin/sh`, so macOS, Linux or WSL: on native Windows the judge call still runs and nothing is logged, so leave the setting off there. After each main-loop turn that was not interrupted:
+With `memoryShadow` set to `on`, the mod does three things it never does otherwise. It sends quoted thinking, quoted tool output or answer text, and the repo's `origin` URL without its credentials, query string or fragment (the repo's directory name when there is no `origin`) to the model provider, on your account. It runs `git` to find the repo and `sh` to append to the log. It writes the log file. The append needs `/bin/sh`, so macOS, Linux or WSL. Leave the setting off on native Windows: with no absolute `HOME` nothing is judged or logged, and with one the judge call still runs and the append fails. After each main-loop turn that was not interrupted:
 
 1. Candidates come from the turn's thinking (thinking summaries must be on):
    - **hedge**: the sentence after a "wait", "actually" or "hmm" that states something, not a plan or a question.
