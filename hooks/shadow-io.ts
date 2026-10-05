@@ -7,7 +7,7 @@ import type { EngineInterface } from 'claude-code'
 import { inputTokens } from './turn'
 import type { ShadowTurn } from './shadow'
 import { selectCandidates } from './shadow-candidates'
-import { JUDGE_SYSTEM, buildRecords, failed, judgePrompt, parseVerdicts } from './shadow-judge'
+import { JUDGE_SYSTEM, buildRecords, failed, judgePrompt, parseVerdicts, projectOf } from './shadow-judge'
 import type { JudgeMeta } from './shadow-judge'
 
 /** The engine calls the shadow pass makes, handed over by `register.tsx`. */
@@ -43,9 +43,8 @@ async function locate(io: ShadowIo): Promise<Where> {
   const common = await git('rev-parse', '--path-format=absolute', '--git-common-dir')
   const root = common.endsWith('/.git') ? common.slice(0, -'/.git'.length) : (await git('rev-parse', '--show-toplevel')) || cwd
   const remote = await git('remote', 'get-url', 'origin')
-  // A remote may carry credentials; keep host and path only.
-  const project = remote.replace(/^[a-z+]+:\/\/[^/]*@/i, 'https://') || root.split('/').filter(Boolean).at(-1) || cwd
-  return { project, root }
+  // A remote may carry credentials or a planted instruction; `projectOf` keeps host and path only.
+  return { project: projectOf(remote, root.split('/').filter(Boolean).at(-1) || cwd), root }
 }
 
 /** Owner-only: the log quotes the session's thinking and tool results. */
