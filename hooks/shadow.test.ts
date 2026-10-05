@@ -94,6 +94,15 @@ describe('createShadow', () => {
     expect(done?.tools[0]?.text.length).toBe(2_000)
   })
 
+  test('caps: the answer stops growing at 50k chars, streamed or handed over by turn.complete', () => {
+    const shadow = open()
+    for (let i = 0; i < 6; i++) shadow.chunk('t1', { kind: 'text', index: 0, text: 'a'.repeat(10_000) })
+    expect(shadow.complete(DONE)?.text.length).toBe(50_000)
+
+    const unstreamed = open()
+    expect(unstreamed.complete({ ...DONE, answer: 'a'.repeat(60_000) })?.text.length).toBe(50_000)
+  })
+
   test('a token the 2k cut would split is redacted whole, not kept as a fragment', () => {
     const shadow = open()
     shadow.tool(bash('env'), ran(`${'r'.repeat(1_984)} ghp_${'0'.repeat(30)} ${'r'.repeat(3_000)}`))

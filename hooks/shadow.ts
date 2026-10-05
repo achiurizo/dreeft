@@ -22,6 +22,8 @@ export type ToolEvidence = { name: string; terms: string[]; text: string; isErro
 
 /** Caps on what one turn buffers, so a runaway turn cannot grow the module without bound. */
 const THINKING_MAX = 200_000
+/** The evidence search wants one sentence of the answer that names a candidate: a dozen pages hold it. */
+const TEXT_MAX = 50_000
 const RESULT_MAX = 2_000
 const TOOLS_MAX = 200
 
@@ -54,7 +56,7 @@ export function createShadow(): Shadow {
         if (chunk.kind === 'thinking' && turn.thinking.length < THINKING_MAX) {
           const gap = lastKind !== 'thinking' && turn.thinking !== '' ? '\n\n' : ''
           turn.thinking += gap + chunk.text
-        } else if (chunk.kind === 'text') {
+        } else if (chunk.kind === 'text' && turn.text.length < TEXT_MAX) {
           turn.text += chunk.text
         }
       }
@@ -68,7 +70,7 @@ export function createShadow(): Shadow {
       const done = turn && turn.turnId === e.turnId ? turn : null
       turn = null
       if (!done || e.isAborted || e.reason === 'aborted') return null
-      return { ...done, text: done.text || e.answer }
+      return { ...done, text: (done.text || e.answer).slice(0, TEXT_MAX) }
     },
   }
 }

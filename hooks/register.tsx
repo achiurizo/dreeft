@@ -68,6 +68,7 @@ const shadowIo = ($: EngineInterface): ShadowIo => ({
   run: (argv, init) => $.process.run(argv, init),
   complete: request => $.model.complete(request),
   home: () => $.env.get('HOME'),
+  stateHome: () => $.env.get('XDG_STATE_HOME'),
 })
 
 /** How a run of text is drawn. */
@@ -135,7 +136,8 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     const judged = attempt(() => shadow?.complete(e))
     // Unawaited, after the turn settled: the judge never delays or changes the turn.
-    if (judged) void judgeTurn(shadowIo($), judged, seen).catch(err => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' }))
+    // The report goes through `safely()`: a log that throws or rejects would leave a rejection nothing handles.
+    if (judged) void judgeTurn(shadowIo($), judged, seen).catch(err => safely(async () => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' })))
     return result
   })
 

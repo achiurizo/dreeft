@@ -12,12 +12,12 @@ const THINKING = 'Actually, the engine never hands tool results to turn.step chu
 const KEEP = '{"verdicts":[{"i":0,"verdict":"keep","fact":"dreeft: tool results reach tool.call only.","type":"project","name":"tool-results-in-tool-call","topic":"context-dreeft","keywords":["tool.call"],"importance":"high","reason":"gotcha"}]}'
 
 /** The world beneath the mod: the model, the shell, the session; records what the mod asked of them. */
-function world(on: On, over: { home?: string | null; remote?: string; appendExit?: number; reply?: ModelCompleteResult; judge?: () => Promise<ModelCompleteResult> } = {}) {
+function world(on: On, over: { home?: string | null; stateHome?: string; remote?: string; appendExit?: number; reply?: ModelCompleteResult; judge?: () => Promise<ModelCompleteResult> } = {}) {
   const asked: ModelCompleteRequest[] = []
   const appended: string[] = []
   const argvs: string[][] = []
   const clock = mock.clock(on, { now: Date.parse('2026-10-02T00:00:00Z') })
-  mock.env(on, over.home === null ? {} : { HOME: over.home ?? '/home/u' })
+  mock.env(on, { ...(over.home === null ? {} : { HOME: over.home ?? '/home/u' }), ...(over.stateHome === undefined ? {} : { XDG_STATE_HOME: over.stateHome }) })
   const logged: string[] = []
   answerBelow(on)
   on('ui.log', async (_$, e) => {
@@ -58,8 +58,8 @@ test('a turn with a candidate: one judge call, one record per candidate appended
   expect(w.logged).toEqual([])
   expect(w.asked).toHaveLength(1)
   expect(w.asked[0]?.model).toBe('haiku')
-  // Owner-only: the log quotes thinking and tool results.
-  expect(w.argvs.find(a => a[0] === '/bin/sh')).toEqual(['/bin/sh', '-c', 'umask 077 && mkdir -p "$1" && chmod 700 "$1" && cat >> "$1/$2"', 'sh', '/home/u/.local/state/dreeft', 'memory-shadow.jsonl'])
+  // Owner-only: the log quotes thinking and tool results. Parents are made before the umask, the file is tightened before the write.
+  expect(w.argvs.find(a => a[0] === '/bin/sh')).toEqual(['/bin/sh', '-c', 'mkdir -p -- "${1%/*}" && umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1" && : >> "$1/$2" && chmod 600 -- "$1/$2" && cat >> "$1/$2"', 'sh', '/home/u/.local/state/dreeft', 'memory-shadow.jsonl'])
   // Shadow mode only: git lookups and the log append, never a memory store or a staging queue.
   expect(w.argvs.map(a => a[0] === '/bin/sh' ? 'sh' : a.slice(0, 1).join(''))).toEqual(['git', 'git', 'sh'])
   const records = recordsOf(w.appended)
@@ -119,6 +119,60 @@ test('without HOME there is no log: no judge call is paid for, and the debug log
   await w.clock.settle()
   expect(w.asked).toHaveLength(0)
   expect(w.logged).toEqual([expect.stringContaining('HOME is not set')])
+})
+
+test('a HOME that is not an absolute path is refused: no judge call is paid for, and the debug log says why', ON, async ($, on) => {
+  const w = world(on, { home: 'relative/home' })
+  await turnWith($, on, THINKING)
+  await complete($, { answer: 'Done.' })
+  await w.clock.settle()
+  expect(w.asked).toHaveLength(0)
+  expect(w.argvs.filter(a => a[0] === '/bin/sh')).toHaveLength(0)
+  expect(w.logged).toEqual([expect.stringContaining('HOME is not an absolute path')])
+})
+
+test('a HOME that starts with - never reaches the shell', ON, async ($, on) => {
+  const w = world(on, { home: '-rf' })
+  await turnWith($, on, THINKING)
+  await complete($, { answer: 'Done.' })
+  await w.clock.settle()
+  expect(w.asked).toHaveLength(0)
+  expect(w.argvs.filter(a => a[0] === '/bin/sh')).toHaveLength(0)
+  expect(w.logged).toEqual([expect.stringContaining('HOME is not an absolute path')])
+})
+
+test('with XDG_STATE_HOME set to an absolute path the log lives under it, HOME or no HOME', ON, async ($, on) => {
+  const w = world(on, { home: null, stateHome: '/xdg/state' })
+  await turnWith($, on, THINKING)
+  await complete($, { answer: 'Done.' })
+  await w.clock.settle()
+  expect(w.logged).toEqual([])
+  expect(w.argvs.find(a => a[0] === '/bin/sh')?.slice(4)).toEqual(['/xdg/state/dreeft', 'memory-shadow.jsonl'])
+  expect(recordsOf(w.appended)).toHaveLength(1)
+})
+
+test('an XDG_STATE_HOME that is not an absolute path is ignored: the log stays under HOME', ON, async ($, on) => {
+  const w = world(on, { stateHome: '-p/state' })
+  await turnWith($, on, THINKING)
+  await complete($, { answer: 'Done.' })
+  await w.clock.settle()
+  expect(w.argvs.find(a => a[0] === '/bin/sh')?.slice(4)).toEqual(['/home/u/.local/state/dreeft', 'memory-shadow.jsonl'])
+})
+
+test('a turn whose append failed is judged again when a later turn repeats its span', ON, async ($, on) => {
+  const over = { appendExit: 1 }
+  const w = world(on, over)
+  const step = [{ kind: 'thinking', index: 0, text: THINKING }, { kind: 'text', index: 1, text: 'Done.' }] as const
+  beneath(on, [...step], [...step], [...step])
+  for (let n = 0; n < 3; n++) {
+    await drain($.turn.step(STEP))
+    await complete($, { answer: 'Done.' })
+    await w.clock.settle()
+    over.appendExit = 0 // the disk has room again
+  }
+  // Judged twice: the failed turn and its repeat. The third turn finds the span logged.
+  expect(w.asked).toHaveLength(2)
+  expect(recordsOf(w.appended)).toHaveLength(1)
 })
 
 test('a log append that fails is reported to the debug log, not dropped silently', ON, async ($, on) => {
