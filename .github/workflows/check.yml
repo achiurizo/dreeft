@@ -13,13 +13,18 @@ jobs:
     runs-on: ubuntu-latest
     # `claude -p x` below is expected to fail fast with no auth; a hang must not run to the 6 hour default.
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        # The minimum the README states, and the newest release. Both exact: bump the second by hand.
+        claude-code: ["2.1.287", "2.1.289"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      # Mods need 2.1.287+; bump the pin to pick up engine type changes.
-      - run: npm install -g @anthropic-ai/claude-code@2.1.288
+      # Mods need 2.1.287+; bump the newest pin in the matrix to pick up engine type changes.
+      - run: npm install -g @anthropic-ai/claude-code@${{ matrix.claude-code }}
       - run: claude plugin test .
       # At the repo root `validate .` picks the marketplace manifest; name the plugin's to check it and the hooks.
       - run: claude plugin validate --strict .claude-plugin/plugin.json
