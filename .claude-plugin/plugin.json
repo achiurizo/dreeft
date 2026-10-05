@@ -39,6 +39,16 @@
         "off",
         "on"
       ]
+    },
+    "desktop": {
+      "type": "string",
+      "title": "Band on the desktop app (experimental)",
+      "description": "on: also draw the band in the Claude Code desktop app. Untested: nobody has checked how the band draws there. off draws on the terminal only. VS Code and mobile never get the band.",
+      "default": "off",
+      "options": [
+        "off",
+        "on"
+      ]
     }
   }
 }
