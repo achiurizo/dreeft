@@ -77,6 +77,12 @@ const FILE_ARGS = ['file_path', 'notebook_path']
 const SEARCH_ARGS = ['pattern', 'query']
 
 /**
+ * The patterns that decide what a name is, as one string. The shadow log's code stamp is taken
+ * over it, so a change to what counts as a name shows in the log.
+ */
+export const SCAN = [TOKEN.source, FILE.source, FILE.flags, DRAWABLE.source, ...FILE_ARGS, ...SEARCH_ARGS].join('\n')
+
+/**
  * The names a tool call touches, from its arguments: the file it names, code names in its search,
  * and file names in its shell command. Directories and every other argument count nothing, so a
  * repo path repeated in each command cannot crowd out the files.

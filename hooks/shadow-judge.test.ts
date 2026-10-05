@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { CODE, buildRecords, fingerprint, parseVerdicts, toStaging } from './shadow-judge'
+import { SELECTION } from './shadow-candidates'
+import { CODE, JUDGE_SYSTEM, buildRecords, fingerprint, parseVerdicts, toStaging } from './shadow-judge'
 
 describe('parseVerdicts', () => {
   test('one verdict per candidate, by index; a missing index is an error', () => {
@@ -42,6 +43,12 @@ describe('fingerprint', () => {
   })
   test('text moving from one part to the next changes the fingerprint', () => {
     expect(fingerprint(['ab', 'c'])).not.toBe(fingerprint(['a', 'bc']))
+  })
+})
+
+describe('CODE', () => {
+  test('covers the shape of the judge\'s user message, not only the selection and the rubric', () => {
+    expect(CODE).not.toBe(fingerprint(['1', SELECTION, JUDGE_SYSTEM]))
   })
 })
 
