@@ -86,6 +86,32 @@ describe('scanThought', () => {
     expect(scanThought('', 'read/write and client/server, then hooks/lib/rows and src/a.ts ').terms).toEqual(['rows', 'a.ts'])
   })
 
+  test('an extension-less file name counts, alone or as the last part of a path', () => {
+    const r = scanThought('', 'The Justfile calls the Makefile, then infra/Dockerfile. Gemfile and Rakefile too. ')
+    expect(r.terms).toEqual(['Justfile', 'Makefile', 'Dockerfile', 'Gemfile', 'Rakefile'])
+  })
+
+  test('a plain word close to a file name is not one: Make, makefile, Docker, Dockerfiles', () => {
+    expect(scanThought('', 'Make it work, a makefile or Docker would do, as Dockerfiles go. A Makefile.am neither. ').terms).toEqual([])
+  })
+
+  test('a .txt file counts; the bare word txt at the end of a sentence does not', () => {
+    expect(scanThought('', 'Read notes.txt first. Save the rest as txt. ').terms).toEqual(['notes.txt'])
+  })
+
+  test('a .tmpl suffix after a known extension is part of the file name', () => {
+    expect(scanThought('', 'Render chezmoi.toml.tmpl again. A bare page.tmpl is no file name. ').terms).toEqual(['chezmoi.toml.tmpl'])
+  })
+
+  test('a dotted directory with an unlisted extension is not a file name: llama.cpp', () => {
+    expect(scanThought('', 'Build llama.cpp from source. ').terms).toEqual([])
+    expect(toolTerms({ command: 'cd llama.cpp && make' })).toEqual([])
+  })
+
+  test('a backslash in thinking text does not split a name', () => {
+    expect(scanThought('', 'Open `C:\\repo\\focus.ts` now. ').terms).toEqual(['C:\\repo\\focus.ts'])
+  })
+
   test('terms shorter than 3 or longer than 40 characters are skipped', () => {
     expect(scanThought('', '`ab` `' + 'a'.repeat(41) + '` `fine` ').terms).toEqual(['fine'])
   })
@@ -97,12 +123,27 @@ describe('toolTerms', () => {
     expect(toolTerms({ notebook_path: 'nb/analysis.ipynb' })).toEqual(['analysis.ipynb'])
   })
 
+  test('a Windows file path counts by its name, whatever the length of the path', () => {
+    expect(toolTerms({ file_path: 'C:\\Users\\me\\repo\\hooks\\focus.ts' })).toEqual(['focus.ts'])
+    expect(toolTerms({ file_path: 'C:\\Users\\me\\code\\some-long-project\\hooks\\register.tsx' })).toEqual(['register.tsx'])
+    expect(toolTerms({ notebook_path: 'D:\\nb/analysis.ipynb' })).toEqual(['analysis.ipynb'])
+  })
+
   test('a search counts its code names, not its plain words', () => {
     expect(toolTerms({ pattern: 'braille|growthTrail', path: '/repo' })).toEqual(['growthTrail'])
   })
 
   test('a command counts only the file names in it, not directories or flags', () => {
     expect(toolTerms({ command: 'cd /Users/me/code/repo && cat hooks/lib.ts README.md | grep -n x_y' })).toEqual(['lib.ts', 'README.md'])
+  })
+
+  test('a command counts an extension-less file name, alone or as the last part of a path', () => {
+    expect(toolTerms({ command: 'just -f Justfile check' })).toEqual(['Justfile'])
+    expect(toolTerms({ command: 'docker build -f infra/Dockerfile . && make -f Makefile all' })).toEqual(['Dockerfile', 'Makefile'])
+  })
+
+  test('a command counts a .txt file and a template of a known extension', () => {
+    expect(toolTerms({ command: 'cat notes.txt home/chezmoi.toml.tmpl' })).toEqual(['notes.txt', 'chezmoi.toml.tmpl'])
   })
 
   test('other arguments and non-object input count nothing', () => {
@@ -120,6 +161,26 @@ describe('focus terms', () => {
       { t: 'a', n: 2 },
       { t: 'c', n: 1 },
     ])
+  })
+
+  test('addTerms: a much-mentioned name keeps its count through fifty other names', () => {
+    const others = Array.from({ length: 50 }, (_, i) => `name${i}`)
+    const focus = addTerms(addTerms(addTerms([], Array.from({ length: 20 }, () => 'hot')), others), ['hot'])
+    expect(focus.at(-1)).toEqual({ t: 'hot', n: 21 })
+    expect(focus).toHaveLength(50)
+  })
+
+  test('addTerms: over the cap the lowest count goes first, the oldest on a tie', () => {
+    const full = Array.from({ length: 50 }, (_, i) => ({ t: `name${i}`, n: i === 3 || i === 10 ? 1 : 2 }))
+    const focus = addTerms(full, ['fresh'])
+    expect(focus.map(f => f.t)).toEqual([...full.filter((_, i) => i !== 3).map(f => f.t), 'fresh'])
+  })
+
+  test('addTerms: the name just added is never the one evicted, so a new name can enter a full list', () => {
+    const full = Array.from({ length: 50 }, (_, i) => ({ t: `name${i}`, n: 2 }))
+    const focus = addTerms(full, ['fresh'])
+    expect(focus.at(-1)).toEqual({ t: 'fresh', n: 1 })
+    expect(focus.map(f => f.t)).toEqual([...full.slice(1).map(f => f.t), 'fresh'])
   })
 
   test('topTerms: a name mentioned once is not focus yet', () => {
