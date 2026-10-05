@@ -1,6 +1,7 @@
 // Memory shadow mode (experimental): judge a turn's candidate facts and append them to a log.
 // Never writes memory, never stages, never changes the turn. The side of the shadow pass that reaches
 // outside: every engine call goes through a `ShadowIo`, so this file holds no `$` either.
+// The append itself is shared: `appendLog` also writes the steering log.
 
 import type { EngineInterface } from 'claude-code'
 
@@ -10,22 +11,26 @@ import { selectCandidates } from './shadow-candidates'
 import { JUDGE_SYSTEM, buildRecords, failed, judgePrompt, parseVerdicts, projectOf } from './shadow-judge'
 import type { JudgeMeta } from './shadow-judge'
 
-/** The engine calls the shadow pass makes, handed over by `register.tsx`. */
-export type ShadowIo = {
-  cwd: EngineInterface['session']['cwd']
-  session: EngineInterface['session']['id']
-  now: EngineInterface['clock']['now']
+/** The engine calls an append to one of the mod's logs makes, handed over by `register.tsx`. */
+export type LogIo = {
   run: EngineInterface['process']['run']
-  complete: EngineInterface['model']['complete']
   /** `$HOME`, when set. */
   home: () => ReturnType<EngineInterface['env']['get']>
   /** `$XDG_STATE_HOME`, when set. */
   stateHome: () => ReturnType<EngineInterface['env']['get']>
 }
 
+/** The engine calls the shadow pass makes, handed over by `register.tsx`. */
+export type ShadowIo = LogIo & {
+  cwd: EngineInterface['session']['cwd']
+  session: EngineInterface['session']['id']
+  now: EngineInterface['clock']['now']
+  complete: EngineInterface['model']['complete']
+}
+
 /** The cheapest model the judge may use: an alias, so each provider resolves its own id. */
 const JUDGE_MODEL = 'haiku'
-/** The log's directory, under `$XDG_STATE_HOME` or its default under `$HOME`. */
+/** The logs' directory, under `$XDG_STATE_HOME` or its default under `$HOME`. */
 const STATE_DEFAULT = '.local/state'
 const LOG_DIR = 'dreeft'
 const LOG_FILE = 'memory-shadow.jsonl'
@@ -54,7 +59,7 @@ async function locate(io: ShadowIo): Promise<Where> {
 const isAbsolute = (path: string | undefined): path is string => path !== undefined && path.startsWith('/')
 
 /** Where the log's directory is: under an absolute `$XDG_STATE_HOME`, else under `$HOME`. Throws when neither can be used. */
-async function logDir(io: ShadowIo): Promise<string> {
+async function logDir(io: LogIo): Promise<string> {
   const [stateHome, home] = await Promise.all([io.stateHome(), io.home()])
   if (isAbsolute(stateHome)) return `${stateHome}/${LOG_DIR}`
   if (!home) throw new Error('HOME is not set, so there is no log to write')
@@ -63,16 +68,26 @@ async function logDir(io: ShadowIo): Promise<string> {
 }
 
 /**
- * Owner-only: the log quotes the session's thinking and tool results. Missing parents are made
+ * Owner-only: the memory shadow log quotes the session's thinking and tool results. Missing parents are made
  * before the umask, so they get the user's own; the file is tightened before the write, since
  * the umask leaves a file that already exists as it was.
  */
 const APPEND = 'mkdir -p -- "${1%/*}" && umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1" && : >> "$1/$2" && chmod 600 -- "$1/$2" && cat >> "$1/$2"'
 
-/** Appends lines to the log with `>>`, so concurrent sessions never drop each other's records. */
-async function append(io: ShadowIo, dir: string, lines: string): Promise<void> {
-  const r = await io.run(['/bin/sh', '-c', APPEND, 'sh', dir, LOG_FILE], { stdin: lines, timeoutMs: 5000 })
+/** Appends lines to `file` in `dir` with `>>`, so concurrent sessions never drop each other's records. */
+async function append(io: LogIo, dir: string, file: string, lines: string): Promise<void> {
+  const r = await io.run(['/bin/sh', '-c', APPEND, 'sh', dir, file], { stdin: lines, timeoutMs: 5000 })
   if (r.exitCode !== 0) throw new Error(`log append exited ${r.exitCode}: ${r.stderr.trim()}`)
+}
+
+/**
+ * Appends lines to one of the mod's logs, in the directory and with the modes the memory shadow log has.
+ * Throws when there is nowhere to log or the append fails.
+ * @param file - the log's file name, a constant of the mod: never text from the session
+ * @param lines - whole lines, each ending in a newline
+ */
+export async function appendLog(io: LogIo, file: string, lines: string): Promise<void> {
+  await append(io, await logDir(io), file, lines)
 }
 
 /**
@@ -107,7 +122,7 @@ export async function judgeTurn(io: ShadowIo, done: ShadowTurn, seen: Set<string
     ? parseVerdicts(reply.text, candidates.length)
     : candidates.map(() => failed(`judge call failed: ${reply.reason}`))
   const records = buildRecords({ ts: new Date(now).toISOString(), session, turn: done.turnId, project, root }, candidates, verdicts, judge)
-  await append(io, dir, records.map(r => `${JSON.stringify(r)}\n`).join(''))
+  await append(io, dir, LOG_FILE, records.map(r => `${JSON.stringify(r)}\n`).join(''))
   // Only once logged: a turn whose lookup, judge call or append failed is judged again when its span repeats.
   if (seen.size >= SEEN_MAX) seen.clear()
   candidates.forEach(c => seen.add(c.term ?? c.span))

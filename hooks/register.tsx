@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register, Timer } from 'claude-code'
+import type { EngineInterface, Register, Timer, TurnCompleteInput, TurnStepInput } from 'claude-code'
 
 import type { Ctx, Phase, Trail, TurnMeta } from '../types'
 import { addTerms, toolTerms } from './focus'
@@ -7,8 +7,10 @@ import { FOLDED, enterPhase, growthOf, inputTokens, newTurn, phaseOfMode, reduce
 import { bandRows, bandWidth } from './rows'
 import type { Seg, Tone } from './rows'
 import { createShadow } from './shadow'
-import { judgeTurn } from './shadow-io'
-import type { ShadowIo } from './shadow-io'
+import { appendLog, judgeTurn } from './shadow-io'
+import type { LogIo, ShadowIo } from './shadow-io'
+import { STEER_LOG, afterStep, coin, coinKey, nextThreshold, noticeText, nudgeText, outcomeRecord, steerArm, steerMode, triggerRecord } from './steer'
+import type { OutcomeRecord, Pending, SteerMode, TriggerRecord } from './steer'
 
 /** How often the ticker advances a running turn, in milliseconds. */
 const TICK_MS = 1000
@@ -60,16 +62,76 @@ function startTicker($: EngineInterface) {
   })
 }
 
-/** The shadow pass's engine calls as closures: `$` never crosses an import, so `judgeTurn` takes these. */
-const shadowIo = ($: EngineInterface): ShadowIo => ({
-  cwd: () => $.session.cwd(),
-  session: () => $.session.id(),
-  now: () => $.clock.now(),
+/** A log append's engine calls as closures: `$` never crosses an import, so `appendLog` takes these. */
+const logIo = ($: EngineInterface): LogIo => ({
   run: (argv, init) => $.process.run(argv, init),
-  complete: request => $.model.complete(request),
   home: () => $.env.get('HOME'),
   stateHome: () => $.env.get('XDG_STATE_HOME'),
 })
+
+/** The shadow pass's engine calls as closures: `$` never crosses an import, so `judgeTurn` takes these. */
+const shadowIo = ($: EngineInterface): ShadowIo => ({
+  ...logIo($),
+  cwd: () => $.session.cwd(),
+  session: () => $.session.id(),
+  now: () => $.clock.now(),
+  complete: request => $.model.complete(request),
+})
+
+/** A line for the debug log; a log that throws costs nothing else. */
+const debug = ($: EngineInterface, text: string) => void attempt(() => $.ui.log(text, { to: 'debug' }))
+
+/** The running turn's steering triggers, each with what the turn did since. Memory only: a reload loses the outcomes still open. */
+let pending: Pending[] = []
+
+/** Appends records to the steering log, unawaited: a failure goes to the debug log, never to the turn. */
+function logSteer($: EngineInterface, records: readonly (TriggerRecord | OutcomeRecord)[]) {
+  const lines = records.map(r => `${JSON.stringify(r)}\n`).join('')
+  void appendLog(logIo($), STEER_LOG, lines).catch(err => debug($, `steer log: ${String(err)}`))
+}
+
+/** Appends one text row to the main conversation; true when it was stored. A refusal or a throw goes to the debug log. */
+async function appendRow($: EngineInterface, type: 'user' | 'system', text: string): Promise<boolean> {
+  try {
+    const row = await $.session.append({ message: { type, content: [{ type: 'text', text }] } })
+    if (row.deny === undefined) return true
+    debug($, `steer: the ${type} row was refused: ${row.deny}`)
+  } catch (err) {
+    debug($, `steer: the ${type} row was not appended: ${String(err)}`)
+  }
+  return false
+}
+
+/**
+ * The end of a main-loop step whose tool calls are about to run, so the turn goes on: when growth has
+ * crossed the turn's next threshold, flips the coin, sends the nudge on a fire, and logs either arm.
+ * The appends are awaited: the row has to be stored before the turn's next request is built.
+ */
+async function nudge($: EngineInterface, e: TurnStepInput, mode: Exclude<SteerMode, 'off'>) {
+  const t = await read($, turn)
+  if (!t || t.done) return
+  const growth = growthOf(t, await read($, ctx))
+  // The larger count wins: memory covers a state write that failed, state covers a reload.
+  const threshold = nextThreshold(growth, Math.max(t.triggers ?? 0, pending.length))
+  if (growth === null || threshold === null) return
+  const [session, now] = await Promise.all([$.session.id(), $.clock.now()])
+  const arm = steerArm(mode, await coin(coinKey(session, e.turnId, threshold)))
+  const trigger: Pending = { turn: e.turnId, step: e.index, threshold, growth, at: now, arm, steps: 0, tools: {} }
+  // Counted before anything is sent: whatever fails below, this threshold is not tried again.
+  pending = [...pending, trigger]
+  // The model reads the user row; the system row is the person's notice of it, which the model never reads.
+  const sent = arm === 'fire' && (await appendRow($, 'user', nudgeText(growth)))
+  if (sent) await appendRow($, 'system', noticeText(growth))
+  logSteer($, [triggerRecord({ ts: new Date(now).toISOString(), session, mode, sent }, trigger)])
+  await update($, turn, x => x && { ...x, triggers: (x.triggers ?? 0) + 1, nudges: sent ? [...(x.nudges ?? []), now] : (x.nudges ?? []) })
+}
+
+/** Logs what the turn did after each of its triggers, once it has completed. */
+async function closeSteer($: EngineInterface, e: TurnCompleteInput, open: readonly Pending[]) {
+  const [session, now, t] = await Promise.all([$.session.id(), $.clock.now(), read($, turn)])
+  const end = { ts: new Date(now).toISOString(), session, now, growth: t?.done ? t.final : null, aborted: e.isAborted }
+  logSteer($, open.map(p => outcomeRecord(end, p)))
+}
 
 /** How a run of text is drawn. */
 type Ink = { color?: string; dimColor?: boolean }
@@ -84,13 +146,15 @@ const PALETTES = {
 } satisfies Record<string, Palette>
 const isPalette = (name: unknown): name is keyof typeof PALETTES => typeof name === 'string' && Object.hasOwn(PALETTES, name)
 
-/** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass, `options.desktop` adds the desktop surface. */
+/** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass, `options.desktop` adds the desktop surface, `options.steer` adds the steering experiment. */
 export const register: Register = (on, options) => {
   const palette: Palette = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
   const ink: Record<Tone, Ink> = { faint: { color: 'gray', dimColor: true }, dim: { dimColor: true }, bright: {}, warn: { color: 'yellow' }, ...palette }
   const shadow = options.memoryShadow === 'on' ? createShadow() : null
   // Only the exact value opts in: the band's drawing on the desktop app is unchecked, so anything else is off.
   const onDesktop = options.desktop === 'on'
+  // Off unless the exact value opts in: `on` changes what the model reads.
+  const steer = steerMode(options.steer)
   /** What the shadow pass already judged this session. */
   const seen = new Set<string>()
 
@@ -140,6 +204,12 @@ export const register: Register = (on, options) => {
     // Unawaited, after the turn settled: the judge never delays or changes the turn.
     // The report goes through `safely()`: a log that throws or rejects would leave a rejection nothing handles.
     if (judged) void judgeTurn(shadowIo($), judged, seen).catch(err => safely(async () => $.ui.log(`memory shadow: ${String(err)}`, { to: 'debug' })))
+    if (steer !== 'off' && pending.length > 0) {
+      const open = pending.filter(p => p.turn === e.turnId)
+      pending = []
+      // Unawaited, after the turn settled, as the judge is.
+      if (open.length > 0) void closeSteer($, e, open).catch(err => debug($, `steer log: ${String(err)}`))
+    }
     return result
   })
 
@@ -155,6 +225,8 @@ export const register: Register = (on, options) => {
   on('turn.step', async function* ($, e, next) {
     if (e.agentId !== undefined) return yield* next(e)
     attempt(() => shadow?.step(e))
+    // A turn that never completed leaves its triggers behind: the next turn starts with none.
+    if (steer !== 'off' && e.index === 0) pending = []
 
     if (e.index === 0) {
       // Nothing measured since load: seed from the status line's figures, apart so a failure here
@@ -194,6 +266,15 @@ export const register: Register = (on, options) => {
           const now = await $.clock.now()
           await update($, turn, t => t && enterPhase(t, 'tool', now))
         })
+        if (steer !== 'off') {
+          // Before this step's own trigger: a trigger counts the steps after its own.
+          attempt(() => {
+            const names = step.value.toolUses.map(u => u.name)
+            pending = pending.map(p => afterStep(p, names))
+          })
+          // Only where the turn goes on: a row appended on the final step would reach no request of this turn.
+          if (step.value.toolUses.length > 0) await safely(() => nudge($, e, steer))
+        }
         return step.value
       }
       const chunk = step.value

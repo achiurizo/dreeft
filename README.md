@@ -18,7 +18,7 @@ The transcript already shows the thinking itself. dreeft is a Claude Code mod th
 - **Timeline**: where the turn's time goes.
 - **Meta**: what the turn costs.
 
-By default: no model calls, no network requests, no file writes. Only the opt-in [memory shadow log](#memory-shadow-log-experimental) makes any. The band appears when a turn starts and stays up after it ends, until the next turn starts.
+By default: no model calls, no network requests, no file writes, and nothing sent to the model. Only two opt-in experiments change that: the [memory shadow log](#memory-shadow-log-experimental) and [steering](#steering-experimental). The band appears when a turn starts and stays up after it ends, until the next turn starts.
 
 ## Install
 
@@ -76,7 +76,7 @@ claude plugin enable dreeft@dreeft       # turn it back on
 claude plugin uninstall dreeft@dreeft    # remove it
 ```
 
-A clone loaded with `--plugin-dir` is loaded for that session only. For a clone loaded in every session, remove its path from `CLAUDE_CODE_PLUGIN_DIRS`. None of these deletes the memory shadow log: if you turned it on, delete the file yourself.
+A clone loaded with `--plugin-dir` is loaded for that session only. For a clone loaded in every session, remove its path from `CLAUDE_CODE_PLUGIN_DIRS`. None of these deletes the memory shadow log or the steering log: if you turned one on, delete its file yourself.
 
 ## The three rows
 
@@ -112,6 +112,8 @@ Each cell is two lanes, thinking on top and tools below:
 
 A dim `▕` closes the strip, so trailing waiting time still reads as time.
 
+With [`steer`](#steering-experimental) set to `on`, an amber `▲` takes the place of the cell for the second in which the mod sent the model a nudge. When a cell packs several seconds, the cell that holds that second shows the `▲`. With `steer` at `off` or `shadow` the strip never shows one.
+
 After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`. A phase under half a second reads `<1s`. A phase with no time is left out. A minute or more reads `1m5s`. Waiting has no total.
 
 Tool time starts when the model's response has ended and its tool calls start to run. It ends when the model is asked again or the turn completes. The time the model takes to stream a tool call's arguments is writing, so a long `Write` call reads as writing, not as a slow tool. Tool time is that whole gap, not a measured duration per tool, so a wait on a permission prompt counts.
@@ -127,6 +129,7 @@ Phases come from three sources: the model's chunks, the end of each response, an
 | `◆ 11s` | Time spent thinking this turn |
 | `2 blk` | Thinking blocks this turn |
 | `3 tools` | Tool calls this turn |
+| `▲ 1` | Steering nudges the mod sent to the model this turn, in amber. Absent at 0, so absent unless [`steer`](#steering-experimental) is `on`. |
 | `+0.6%` | How much this turn grew the context, in points of the window. Amber at 10 points or more. Negative after a compaction. |
 | `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest. An amber `↓` marks a compaction, including a `/compact` between turns. |
 
@@ -134,11 +137,11 @@ Growth and the trail are absent until Claude Code has reported the context's siz
 
 ### Good to know
 
-- **Narrow terminals.** The band takes 60% of the columns Claude Code gives it, rounded down, and at most 84 cells. The meta row drops parts in this order: the tool count, then the trail, then the whole row. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end and keeps the second-guess count. When no name fits, it reads `∴ ⟲ 2`. When the count does not fit either, the count drops whole and the row reads `∴ …`, then `∴` alone. When the band is short on rows, it keeps the bottom ones. With no rows to draw in, it draws nothing. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. When the band's width comes to under 12 cells, it draws nothing.
+- **Narrow terminals.** The band takes 60% of the columns Claude Code gives it, rounded down, and at most 84 cells. The meta row drops parts in this order: the tool count, then the trail, then the nudge count, then the whole row. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end and keeps the second-guess count. When no name fits, it reads `∴ ⟲ 2`. When the count does not fit either, the count drops whole and the row reads `∴ …`, then `∴` alone. When the band is short on rows, it keeps the bottom ones. With no rows to draw in, it draws nothing. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. When the band's width comes to under 12 cells, it draws nothing.
 - **Surveys.** The band is hidden while Claude Code shows a survey.
-- **Glyph width.** The band counts every glyph it draws as one cell: `∴`, `×`, `·`, `◆`, `⟲`, `…`, `↓`, the timeline's blocks and the braille trail. A terminal set to draw ambiguous-width characters as two cells will misalign the rows.
+- **Glyph width.** The band counts every glyph it draws as one cell: `∴`, `×`, `·`, `◆`, `⟲`, `…`, `↓`, `▲`, the timeline's blocks and the braille trail. A terminal set to draw ambiguous-width characters as two cells will misalign the rows.
 - **Main conversation only.** Subagent thinking and turns are ignored.
-- **Quiet by default.** The mod makes no model calls, network requests or file writes, unless you turn on the experimental [memory shadow log](#memory-shadow-log-experimental).
+- **Quiet by default.** The mod makes no model calls, network requests or file writes, and sends nothing to the model, unless you turn on an experiment. The [memory shadow log](#memory-shadow-log-experimental) makes model calls and writes a log. [Steering](#steering-experimental) writes a log, and at `on` appends a note the model reads.
 
 ## Requirements
 
@@ -160,6 +163,7 @@ Growth and the trail are absent until Claude Code has reported the context's siz
 | --- | --- | --- |
 | `palette` | `mono` | Timeline colors. `mono` uses brightness only (thinking plain, tools dim). `amber` and `blue` color thinking and keep tools dim. `magenta` colors thinking magenta and tools cyan. |
 | `memoryShadow` | `off` | `on` turns on the experimental memory shadow log. See below. |
+| `steer` | `off` | Experimental. `shadow` logs each time a turn's context growth crosses 10 and 20 points, and sends nothing. `on` also sends the model a short note on half of those crossings. See [Steering](#steering-experimental). Any other value is `off`. |
 | `desktop` | `off` | Experimental. `on` also draws the band in the Claude Code desktop app. The band's drawing there has not been checked. When you try it, look at the braille trail, the dim text, the palette colors and the band's width. `off` draws on the terminal only. VS Code and mobile get nothing with either value. |
 
 Change it with `/config`, or in `~/.claude/settings.json`:
@@ -202,6 +206,55 @@ With `XDG_STATE_HOME` set to an absolute path, read `$XDG_STATE_HOME/dreeft/memo
 
 </details>
 
+## Steering (experimental)
+
+A spike that measures whether a short note, appended to a running turn, changes what the model does next. With `steer` set to `on` this changes what the model reads. It is an experiment, and no effect has been shown yet.
+
+<details>
+<summary>What it sends, what it logs, and how to read it</summary>
+
+| `steer` | Sends to the model | Writes |
+| --- | --- | --- |
+| `off` (default) | Nothing | Nothing. No trigger is evaluated. |
+| `shadow` | Nothing | One log line per trigger, one more when the turn completes |
+| `on` | The nudge, on the triggers whose coin fires (half of them) | The same log lines, for fired and held triggers alike |
+
+1. **The trigger.** The mod looks at one moment only: a response of a main-conversation turn has ended and its tool calls are about to run, so the turn will make another request. At that moment, the turn's context growth (the meta row's figure, in points of the window) is compared with a threshold: 10 points for the turn's first trigger, 20 points for its second. A turn has at most 2 triggers, one per such moment: a turn that jumps from 5 to 25 points triggers once there, and again when its next response with tool calls ends. Unmeasured growth never triggers. The response that ends the turn never triggers, and neither does a subagent's turn.
+2. **The coin.** Each trigger gets an arm, `fire` or `hold`. The coin is a SHA-256 hash of the session id, the turn id and the threshold, read as a number from 0 up to 1: under 0.5 is `fire`. Half of the triggers fire. The held half is the comparison: the log can set the turns that got the nudge beside the turns that crossed the same threshold and did not. With `shadow` every trigger holds.
+3. **The nudge**, on a `fire` with `steer` at `on`. The mod appends one row to the conversation, which the model reads with the turn's next request. Claude Code does not show that row to you as a typed message. The exact text, with the growth rounded to whole points in place of `12`:
+
+   ```text
+   [dreeft] This turn has grown the context by 12 points of the window. If large reads remain, hand them to a subagent and keep only the conclusion.
+   ```
+
+4. **What you see.** Right after the nudge is stored, the mod appends a notice to the transcript, which the model never reads:
+
+   ```text
+   dreeft steer: sent the model a hidden note at 12 points of context growth, suggesting a subagent for large reads.
+   ```
+
+   The band marks the nudge too: an amber `▲` in the timeline at the second it was sent, and `▲ 1` in the meta row. A held trigger changes nothing the model reads, so the transcript and the band show nothing for it.
+5. **When the append fails.** If Claude Code or another plugin refuses the row, or the append throws, nothing is sent, no notice is appended, the band shows no mark, the turn goes on unchanged, and the reason goes to the debug log (`claude --debug`). The trigger is still logged, with `sent: false`, and still counts toward the turn's 2.
+6. **The cost to the turn.** At each such moment the mod reads its own state. At a trigger with `steer` at `on` it also waits for the two appends before the tool calls run, because the row has to be stored before the next request is built. Log writes are not waited for.
+7. **The log.** JSON lines are appended to `~/.local/state/dreeft/steer.jsonl`, or to `$XDG_STATE_HOME/dreeft/steer.jsonl` when `XDG_STATE_HOME` is set to an absolute path. The directory and the file are owner-only (`700` and `600`), set the same way and with the same `/bin/sh` append as the memory shadow log, so macOS, Linux or WSL. A `HOME` that is not an absolute path is refused: the trigger still runs, and its log line is dropped with a line in the debug log. The log holds no text from your session: ids, numbers, tool names and the nudge's own text.
+   - A `trigger` line, when a trigger gets its arm: `schema` (the record layout's version, now `1`), `kind` (`trigger`), `rev` (a number bumped when the trigger, the thresholds or the text change, now `1`), `ts` (the time), `session`, `turn`, `step` (the index of the response that ended, from 0), `threshold` (`10` or `20`), `growth` (points of the window at the trigger), `mode` (`shadow` or `on`), `arm` (`fire` or `hold`), `sent` (`true` when the nudge was stored in the conversation) and `text` (the nudge's text for a `fire`, `null` for a `hold`).
+   - An `outcome` line per trigger, when its turn completes: `schema`, `kind` (`outcome`), `rev`, `ts`, `session`, `turn` and `threshold` (the same values as its trigger line, so the two lines join), `arm`, `steps_after` (responses that ended after the trigger's own), `tools_after` (tool calls those responses made), `tool_names` (the same calls counted per tool name: a subagent call is what the nudge suggests), `growth_after` (points of the window the turn grew after the trigger, `null` when the turn's end was unmeasured), `ms_after` (milliseconds from the trigger to the turn's end) and `aborted` (whether the turn was interrupted).
+   - A trigger line with no outcome line: the turn never completed, or the mod reloaded mid-turn. A reload keeps the turn's trigger count and loses its open outcomes.
+
+Read each trigger beside its outcome:
+
+```sh
+jq -sc 'group_by([.session, .turn, .threshold])[] | select(length == 2) | add | {arm, sent, growth, steps_after, tool_names, growth_after, aborted}' ~/.local/state/dreeft/steer.jsonl
+```
+
+With `XDG_STATE_HOME` set to an absolute path, read `$XDG_STATE_HOME/dreeft/steer.jsonl` instead.
+
+What has been checked, and how far. The mod's tests run on Claude Code's test kit, which has no conversation to append to, so they cover the trigger, the coin, the log, the band's mark and an append that fails. The stored row was checked by hand in one real session on Claude Code 2.1.289, run without a terminal (`claude -p`): the note was stored after the tool results of the response that triggered it, the turn's next request succeeded and the turn completed, the notice was stored as a transcript notice, and the log held a held trigger, a fired trigger and both outcomes. Not checked: the band's mark and the notice as drawn in a terminal, and any effect on what the model does.
+
+A turn triggers only when its growth is measured. The first turn of a session has no starting size to grow from, so it never triggers.
+
+</details>
+
 ## How it works
 
 A few hooks and a one-second ticker. Every chunk passes through unchanged, and a failed state update is dropped so the turn continues.
@@ -209,10 +262,10 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 <details>
 <summary>Hooks and files</summary>
 
-- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, and block and tool counts. When a step ends, its tool calls' arguments add to the focus counts, and a step with tool calls enters the tool phase.
+- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, and block and tool counts. When a step ends, its tool calls' arguments add to the focus counts, and a step with tool calls enters the tool phase. With `steer` at `shadow` or `on`, that same moment evaluates the steering trigger, and at `on` a fired trigger appends the nudge and its notice with `$.session.append`.
 - A `ui.render` hook on `Spinner` notes the spinner's mode and draws the spinner unchanged. Render hooks can't write state, so the ticker applies the noted mode as a phase, up to a second late.
 - A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
-- `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.
+- `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail, and with `steer` at `shadow` or `on` logs the outcome of the turn's triggers.
 - A `session.compact` hook adds the compaction mark to the trail. A compaction that was only precomputed, or that was skipped, adds none.
 - A `session.start` hook restarts the ticker when the mod reloads while a turn is still running.
 - A `tool.call` hook is registered only when the memory shadow log is on. It keeps each main-conversation tool result for the outcome evidence and returns the result unchanged.
@@ -229,7 +282,8 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 | `hooks/shadow.ts` | Memory shadow log: the turn buffer |
 | `hooks/shadow-candidates.ts` | Memory shadow log: candidate selection and outcome evidence |
 | `hooks/shadow-judge.ts` | Memory shadow log: judge prompt, verdict parsing, log records |
-| `hooks/shadow-io.ts` | Memory shadow log: the judge call and the log append |
+| `hooks/shadow-io.ts` | Memory shadow log: the judge call. The log append, which the steering log shares |
+| `hooks/steer.ts` | Pure: steering's trigger, coin, nudge text and log records |
 | `types/index.d.ts` | Shape of the mod's session state |
 | `hooks/*.test.ts` | Tests, run with the `claude-code/testing` kit |
 | `hooks/testkit.ts` | Helpers the tests share: a probe that reads the mod's state, and scripted steps |
