@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
-import { SPANS_MAX, enterPhase, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineCells } from './turn'
+import { SPANS_MAX, enterPhase, growthOf, inputTokens, newTurn, phaseOfMode, phaseTotals, reduceChunk, timelineCells } from './turn'
 import { stop } from './testkit'
 
 describe('phases', () => {
@@ -105,6 +105,25 @@ describe('reduceChunk', () => {
       100,
     )
     expect(t).toMatchObject({ now: 100, spans: t0.spans, lastChunk: 'stop' })
+  })
+})
+
+describe('usage', () => {
+  test('inputTokens: a missing or non-finite field counts as 0', () => {
+    expect(inputTokens({ input_tokens: 5, cache_read_input_tokens: 2, cache_creation_input_tokens: 1 })).toBe(8)
+    expect(inputTokens({ input_tokens: 5 })).toBe(5)
+    expect(inputTokens({ input_tokens: 5, cache_read_input_tokens: Number.NaN, cache_creation_input_tokens: Infinity })).toBe(5)
+    expect(inputTokens({})).toBe(0)
+  })
+
+  test('growthOf: a context size or start that is not a finite number gives null, never NaN or an infinity', () => {
+    const t = newTurn(0, 100_000, 1_000_000)
+    const ctx = { tokens: 106_000, window: 1_000_000, lastInput: null }
+    expect(growthOf(t, ctx)).toBe(0.6)
+    expect(growthOf(t, { ...ctx, tokens: Number.NaN })).toBeNull()
+    expect(growthOf(t, { ...ctx, tokens: Infinity })).toBeNull()
+    expect(growthOf({ ...t, startTokens: Number.NaN }, ctx)).toBeNull()
+    expect(growthOf({ ...t, window: Number.NaN }, ctx)).toBeNull()
   })
 })
 

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { TurnMeta } from '../types'
 
 import { growthOf, newTurn } from './turn'
-import { bandRows, bandWidth, braille, focusRow, formatGrowth, formatSecs, growthTrail, metaRow, timelineRow } from './rows'
+import { bandRows, bandWidth, braille, focusRow, formatGrowth, formatSecs, growthTrail, metaRow, timelineRow, width } from './rows'
 
 const text = (segs: { text: string }[]) => segs.map(s => s.text).join('')
 
@@ -20,6 +20,13 @@ describe('rows', () => {
 
   test('focusRow: nothing yet shows a placeholder', () => {
     expect(text(focusRow([], 0, 80))).toBe('∴ …')
+  })
+
+  test('focusRow: with no names, a second-guess count too wide to fit drops, never the leading ∴', () => {
+    expect(text(focusRow([], 9999, 8))).toBe('∴ ⟲ 9999')
+    expect(text(focusRow([], 12345, 8))).toBe('∴ …')
+    expect(text(focusRow([], 12345, 2))).toBe('∴')
+    expect(text(focusRow([], 0, 2))).toBe('∴')
   })
 
   test('timelineRow: waiting is blank, and the end cap shows where the strip stops', () => {
@@ -139,6 +146,14 @@ describe('metaRow', () => {
   test('growth of 10 or more is amber', () => {
     expect(metaRow(meta, 12, [], 56).find(s => s.text === '+12%')?.tone).toBe('warn')
   })
+  test('growth that draws as 10.0 is amber, in the figure and in the newest trail cell', () => {
+    const row = metaRow(meta, 9.96, [], 56)
+    expect(row.find(s => s.text === '+10.0%')?.tone).toBe('warn')
+    expect(row.at(-1)?.tone).toBe('warn')
+    const under = metaRow(meta, 9.94, [], 56)
+    expect(under.find(s => s.text === '+9.9%')?.tone).toBe('bright')
+    expect(under.at(-1)?.tone).toBe('bright')
+  })
   test('drops the tool count first, then the trail, then everything', () => {
     expect(text(metaRow(meta, 0.62, [], 40))).not.toContain('tools')
     expect(text(metaRow(meta, 0.62, [], 40))).toMatch(/\+0\.6% \S/)
@@ -185,7 +200,16 @@ describe('band', () => {
 
   test('bandRows: a short band keeps the bottom rows', () => {
     expect(bandRows(turn, [], ctx, 60, 2).map(r => text(r).slice(0, 1))).toEqual(['▀', '◆'])
-    expect(bandRows(turn, [], ctx, 60, 0).map(r => text(r).slice(0, 1))).toEqual(['◆'])
+  })
+
+  test('bandRows: maxRows 0 draws nothing', () => {
+    expect(bandRows(turn, [], ctx, 60, 0)).toEqual([])
+  })
+
+  test('bandRows: on the narrowest band a five-digit second-guess count stays inside the width', () => {
+    const rows = bandRows({ ...turn, focus: [], hedges: 12345 }, [], ctx, 12, 10)
+    expect(rows.map(text)[0]).toBe('∴ …    ')
+    for (const row of rows) expect(width(row)).toBeLessThanOrEqual(12)
   })
 
   test('bandRows: a done turn shows its fixed growth and is not drawn twice in the trail', () => {
