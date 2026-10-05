@@ -60,7 +60,8 @@ export function timelineRow(spans: Span[], start: number, end: number, max: numb
 }
 
 /**
- * `∴` then the top terms with counts, then second-guesses; terms drop from the end to fit.
+ * `∴` then the top terms with counts, then second-guesses; terms drop from the end to fit, then
+ * the second-guesses, then the `…` placeholder; the leading `∴` always stays.
  * @param max - width in terminal cells
  */
 export function focusRow(top: Term[], hedges: number, max: number): Seg[] {
@@ -74,7 +75,12 @@ export function focusRow(top: Term[], hedges: number, max: number): Seg[] {
     const row: Seg[] = [{ text: '∴ ', tone: 'dim' }, ...terms, ...tail]
     if (width(row) <= max) return row
   }
-  return hedges > 0 ? [{ text: '∴ ⟲ ', tone: 'dim' }, { text: String(hedges), tone: 'warn' }] : [{ text: '∴ …', tone: 'dim' }]
+  const bare: Seg[][] = [
+    ...(hedges > 0 ? [[{ text: '∴ ⟲ ', tone: 'dim' as const }, { text: String(hedges), tone: 'warn' as const }]] : []),
+    [{ text: '∴ …', tone: 'dim' }],
+  ]
+  // A long count on the narrowest band is wider than the row: it drops whole, never cut mid-number.
+  return bare.find(row => width(row) <= max) ?? [{ text: '∴', tone: 'dim' }]
 }
 
 /** Braille cells in the meta row's growth trail, two turns per cell. */
@@ -148,8 +154,10 @@ export function metaRow(meta: Meta, growth: number | null, history: Trail, max: 
     const plain = [head + tools, head].map(text => [{ text, tone: 'dim' as Tone }])
     return plain.find(c => width(c) <= max) ?? []
   }
-  const tone: Tone = growth >= 10 ? 'warn' : 'bright'
-  const g: Seg[] = [{ text: '   ', tone: 'dim' }, { text: formatGrowth(growth), tone }]
+  const drawn = formatGrowth(growth)
+  // Amber follows the figure as drawn: 9.96 rounds to `+10.0%`, so the unrounded number would miss it.
+  const tone: Tone = Number.parseFloat(drawn) >= 10 ? 'warn' : 'bright'
+  const g: Seg[] = [{ text: '   ', tone: 'dim' }, { text: drawn, tone }]
   const trail = growthTrail(history, growth, TRAIL_CELLS)
   const t: Seg[] = [{ text: ' ', tone: 'dim' }, ...trail.past, { text: trail.now, tone }]
   const candidates: Seg[][] = [
@@ -185,17 +193,19 @@ export function bandWidth(columns: number): number | null {
  * @param trail - recent turns' growth; a done turn's own growth is already its last number, and a
  *   compaction after it belongs to the next turn
  * @param max - width in terminal cells
- * @param maxRows - most rows the band may take
+ * @param maxRows - most rows the band may take; under 1 draws nothing
  */
 export function bandRows(t: TurnMeta, trail: Trail, ctx: Ctx | null, max: number, maxRows: number): Seg[][] {
   const growth = t.done ? t.final : growthOf(t, ctx)
   const history = t.done && t.final !== null ? trail.slice(0, Math.max(0, trail.findLastIndex(v => v !== null))) : trail
   const meta = { thinkMs: phaseTotals(t.spans, t.now).think, blocks: t.blocks, tools: t.tools }
-  const builders = [
+  const all = [
     (cells: number) => focusRow(topTerms(t.focus, FOCUS_TERMS), t.hedges, cells),
     (cells: number) => timelineRow(t.spans, t.started, t.now, cells),
     (cells: number) => metaRow(meta, growth, history, cells),
-  ].slice(-Math.max(1, maxRows))
+  ]
+  // `slice(-0)` keeps every row, so no rows is its own case.
+  const builders = maxRows < 1 ? [] : all.slice(-maxRows)
   return builders
     .map((build, i): Seg[] => (i === 0 ? [...build(max - CORNER), { text: ' '.repeat(CORNER), tone: 'dim' }] : build(max)))
     .filter(row => row.some(seg => seg.text.trim() !== ''))

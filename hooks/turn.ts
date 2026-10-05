@@ -139,13 +139,18 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
   }
 }
 
-/** A response's input side: fresh tokens plus what the cache read and wrote. */
-export function inputTokens(u: { input_tokens: number; cache_read_input_tokens: number; cache_creation_input_tokens: number }): number {
-  return u.input_tokens + u.cache_read_input_tokens + u.cache_creation_input_tokens
+/** A token count as reported, or 0 when the field is missing or not a finite number. */
+const count = (n: number | undefined): number => (typeof n === 'number' && Number.isFinite(n) ? n : 0)
+
+/** A response's input side: fresh tokens plus what the cache read and wrote; a missing or non-finite field counts as 0. */
+export function inputTokens(u: { input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }): number {
+  return count(u.input_tokens) + count(u.cache_read_input_tokens) + count(u.cache_creation_input_tokens)
 }
 
-/** Context growth since the turn's step 0, in percentage points of the window. */
+/** Context growth since the turn's step 0, in percentage points of the window; null when unmeasured or not a finite number. */
 export function growthOf(t: TurnMeta | null, c: Ctx | null): number | null {
   if (!t || !c || t.startTokens === null || t.window <= 0) return null
-  return Math.round(((c.tokens - t.startTokens) / t.window) * 10000) / 100
+  const points = Math.round(((c.tokens - t.startTokens) / t.window) * 10000) / 100
+  // A NaN or an infinity here would reach the trail, which scales every cell to its largest number.
+  return Number.isFinite(points) ? points : null
 }
