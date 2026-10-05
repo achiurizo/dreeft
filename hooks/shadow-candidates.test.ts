@@ -159,5 +159,8 @@ describe('SELECTION', () => {
   test('holds the patterns that decide what a name is', () => {
     expect(SELECTION).toContain(SCAN)
     expect(SCAN).toContain('tsx?')
+    expect(SCAN).toContain('Justfile')
+    expect(SCAN).toContain('tmpl')
+    expect(SCAN).toContain('\\\\')
   })
 })
