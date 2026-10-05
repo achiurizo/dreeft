@@ -39,3 +39,12 @@ jobs:
       # builders, and a diff means the committed images no longer show what the band draws.
       - run: npx -y bun@1.4.2 scripts/readme-images.ts
       - run: git diff --exit-code assets/
+
+  # One fixed job name for a ruleset to require: the matrix job names change with every version bump.
+  all-checks:
+    if: always()
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: test "${{ needs.check.result }}" = success
