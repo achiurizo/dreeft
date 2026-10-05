@@ -68,8 +68,8 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
 - Names come from two places:
   - The turn's tool calls: the file a tool reads or edits, code names in a search pattern, and file names in a shell command. The file a tool reads or edits counts by its last part, whether the path uses `/` or the Windows `\`.
   - The thinking text, when thinking summaries are on: a backticked span, a file name or path, or a camelCase or snake_case identifier.
-- A file name is a word that ends in a listed extension (`.ts`, `.md`, `.json`, `.txt` and the like), with `.tmpl` after it as part of the name (`chezmoi.toml.tmpl`), or exactly one of `Justfile`, `Makefile`, `Dockerfile`, `Gemfile`, `Rakefile`.
-- Plain words and directories don't count. `Make`, `makefile` and `llama.cpp` are not file names.
+- A file name is a word that ends in one of these extensions: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.json`, `.md`, `.py`, `.rb`, `.go`, `.rs`, `.sh`, `.fish`, `.toml`, `.yaml`, `.yml`, `.css`, `.html`, `.txt`. A `.tmpl` after the extension is part of the name (`chezmoi.toml.tmpl`). `Justfile`, `Makefile`, `Dockerfile`, `Gemfile` and `Rakefile` count too, in exactly that spelling.
+- Plain words and directories don't count, and neither does a file with any other extension unless it is in backticks: `Make`, `makefile` and `main.cpp` are not file names.
 - A turn tracks at most 50 names. Past that, the name with the lowest count goes first, the oldest on a tie, so a name the turn keeps coming back to stays.
 - `⟲ 2` counts second-guesses: a sentence in the thinking that opens with "Wait,", "Actually," or "Hmm,", or that narrates a change of mind ("I realize", "turns out", "on closer inspection"). The same words used as verb or adverb ("wait for CI", "actually works") do not count. Shown in amber. Needs thinking summaries on.
 - This is a word-count heuristic, not a summary, so it can pick the wrong names.
