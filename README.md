@@ -178,6 +178,28 @@ Change it with `/config`, or in `~/.claude/settings.json`:
 
 The key is `dreeft@dreeft` for a marketplace install. A clone loaded with `--plugin-dir` or `CLAUDE_CODE_PLUGIN_DIRS` reads the key `dreeft` instead.
 
+## What the mod reads, runs and sends
+
+With every setting at its default, the mod reads the main conversation's model chunks (thinking text and tool call arguments), the spinner's mode and the context size. It keeps counts from them in session state and draws the band. It starts no program, makes no model call, reads no environment variable, writes no file and sends nothing anywhere.
+
+The two experiments add the calls below. The mod makes no network request of its own in any mode: it never calls `$.net`.
+
+| Call | When | What it does |
+| --- | --- | --- |
+| `$.model.complete` | `memoryShadow` is `on`, once per turn that has candidates | The mod's only way out. It sends one judge prompt to the model alias `haiku` through Claude Code, to your model provider, on your account. The prompt holds up to 6 quoted spans of the turn's thinking, each with a quoted tool result or answer sentence, and the project's name (the `origin` URL without credentials, query string or fragment, or the repo's directory name). Anything shaped like a credential is replaced with `[redacted]` first. |
+| `$.process.run` with `git` | `memoryShadow` is `on`, once per load | Runs `git -C <session directory> rev-parse --path-format=absolute --git-common-dir`, `git -C <session directory> rev-parse --show-toplevel` and `git -C <session directory> remote get-url origin`, to name the project and find its main checkout. |
+| `$.process.run` with `/bin/sh` | `memoryShadow` is `on`, or `steer` is `shadow` or `on` | Runs `/bin/sh -c '<script>' sh <log directory> <log file>` to append lines to a local log. The script is fixed text: `mkdir -p -- "${1%/*}" && umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1" && : >> "$1/$2" && chmod 600 -- "$1/$2" && cat >> "$1/$2"`. The log file is `memory-shadow.jsonl` or `steer.jsonl`, both names fixed in the mod. No text from the session is part of the command: the lines go in on stdin. |
+| `$.env.get` | with either log | Reads `HOME` and `XDG_STATE_HOME`, only to find the log directory: `$XDG_STATE_HOME/dreeft`, else `~/.local/state/dreeft`. Neither is a credential, and the mod reads no credential, token or key from your machine. |
+| `$.session.cwd`, `$.session.id` | with either log | The session's directory goes to `git -C`. The session id goes into the log records. |
+| `$.session.append` | `steer` is `on`, on a fired trigger | Appends one fixed two-sentence note the model reads, and a visible notice of it, to the conversation. |
+
+Two of the mod's hooks have the name of an engine call, so they see that call when other code makes it. Neither changes it:
+
+- `session.compact` runs the compaction unchanged and returns its result unchanged. It only adds the compaction mark to the band's trail.
+- `tool.call` is registered only when `memoryShadow` is `on`. It runs the tool call unchanged, keeps a copy of a main-conversation result as evidence for the judge, and returns the result unchanged.
+
+`hooks/shadow-candidates.ts` holds the patterns that find credentials to redact. Those patterns name commands such as `curl`, `wget` and `mysql` and their password flags. The file downloads nothing and runs nothing.
+
 ## Memory shadow log (experimental)
 
 A spike that measures whether the session's thinking holds durable facts worth keeping as memories. It only logs. It never writes to a memory store, never stages memory candidates, and never changes the turn. The band shows nothing new.
