@@ -1,0 +1,9 @@
+# Moves the sha-pinned actions in .github/workflows/.
+# There is no npm manifest, so there is no npm entry: the Claude Code, TypeScript and bun
+# pins live in .github/workflows/check.yml and are bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
