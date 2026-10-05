@@ -22,7 +22,7 @@ By default: no model calls, no network requests, no file writes. Only the opt-in
 
 ## Install
 
-Inside Claude Code:
+A mod installs as a Claude Code plugin. Inside Claude Code:
 
 ```text
 /plugin marketplace add achiurizo/dreeft
@@ -58,20 +58,41 @@ If hot reloading is enabled in a session, edits to `hooks/` take effect without 
 
 </details>
 
+### Update
+
+Releases and their notes are on the [Releases page](https://github.com/achiurizo/dreeft/releases). For a marketplace install, this updates the mod to the latest version:
+
+```sh
+claude plugin update dreeft@dreeft
+```
+
+A session that is already running keeps the code it loaded. Restart it, or run `/reload-plugins`, to load the new code.
+
+### Disable or uninstall
+
+```sh
+claude plugin disable dreeft@dreeft      # turn the mod off, keep it installed
+claude plugin enable dreeft@dreeft       # turn it back on
+claude plugin uninstall dreeft@dreeft    # remove it
+```
+
+A clone loaded with `--plugin-dir` is loaded for that session only. For a clone loaded in every session, remove its path from `CLAUDE_CODE_PLUGIN_DIRS`. None of these deletes the memory shadow log: if you turned it on, delete the file yourself.
+
 ## The three rows
 
 ### Focus: what the turn keeps coming back to
 
 <img src="assets/row-focus.svg" width="620" alt="Focus row: register.tsx ×6, metaRow ×4, observe ×2, then 2 second-guesses in amber.">
 
-- The three names the turn comes back to most, with counts. A name has to come up at least twice to show; until one does, the row reads `∴ …`.
+- The three names the turn comes back to most, with counts. A name has to come up at least twice to show. Until one does, the row reads `∴ …`, or `∴ ⟲ 2` when second-guesses have been counted.
 - Names come from two places:
   - The turn's tool calls: the file a tool reads or edits, code names in a search pattern, and file names in a shell command. The file a tool reads or edits counts by its last part, whether the path uses `/` or the Windows `\`.
   - The thinking text, when thinking summaries are on: a backticked span, a file name or path, or a camelCase or snake_case identifier.
 - A file name is a word that ends in one of these extensions: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.json`, `.md`, `.py`, `.rb`, `.go`, `.rs`, `.sh`, `.fish`, `.toml`, `.yaml`, `.yml`, `.css`, `.html`, `.txt`. A `.tmpl` after the extension is part of the name (`chezmoi.toml.tmpl`). `Justfile`, `Makefile`, `Dockerfile`, `Gemfile` and `Rakefile` count too, in exactly that spelling.
-- Plain words and directories don't count, and neither does a file with any other extension unless it is in backticks: `Make`, `makefile` and `main.cpp` are not file names.
+- Plain words and directories don't count, and neither does a file with any other extension unless it is in backticks: `Make`, `makefile` and `main.cpp` are not file names. One exception, in the thinking text and in a search pattern: a path of three or more parts counts by its last part, whatever that part is. `src/hooks/utils` counts `utils`, and `src/hooks` counts nothing.
+- A name is 3 to 40 characters of printable ASCII. A shorter or longer name, or one with any other character, does not count.
 - A turn tracks at most 50 names. Past that, the name with the lowest count goes first, the oldest on a tie, so a name the turn keeps coming back to stays.
-- `⟲ 2` counts second-guesses: a sentence in the thinking that opens with "Wait,", "Actually," or "Hmm,", or that narrates a change of mind ("I realize", "turns out", "on closer inspection"). The same words used as verb or adverb ("wait for CI", "actually works") do not count. Shown in amber. Needs thinking summaries on.
+- `⟲ 2` counts second-guesses: a sentence in the thinking that opens with "Wait,", "Actually,", "Hmm,", "Oh,", "Oops," or "No,", or that narrates a change of mind ("I realize", "turns out", "on closer inspection", "reconsider"). The same words used as verb or adverb ("wait for CI", "actually works") do not count. Shown in amber. Needs thinking summaries on.
 - This is a word-count heuristic, not a summary, so it can pick the wrong names.
 
 ### Timeline: where the time goes
@@ -91,7 +112,7 @@ Each cell is two lanes, thinking on top and tools below:
 
 A dim `▕` closes the strip, so trailing waiting time still reads as time.
 
-After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`. A phase under half a second reads `<1s`.
+After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`. A phase under half a second reads `<1s`. A phase with no time is left out. A minute or more reads `1m5s`. Waiting has no total.
 
 Phases come from two sources: the model's chunks, and the mode of Claude Code's own spinner line (requesting, thinking, responding, tool input, tool use). The spinner still reports thinking when thinking summaries are off and no thinking text streams.
 
@@ -107,9 +128,13 @@ Phases come from two sources: the model's chunks, and the mode of Claude Code's 
 | `+0.6%` | How much this turn grew the context, in points of the window. Amber at 10 points or more. Negative after a compaction. |
 | `⣀⣠⣤⣴` | Growth of the last 20 turns, two turns per braille cell, scaled to the largest. An amber `↓` marks a compaction, including a `/compact` between turns. |
 
+Growth and the trail are absent until Claude Code has reported the context's size. Until then the row reads `◆ 11s · 2 blk · 3 tools`.
+
 ### Good to know
 
-- **Narrow terminals.** The meta row drops parts in this order: the tool count, then the trail. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end. When the band is short on rows, it keeps the bottom ones. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. Under 12 cells it draws nothing.
+- **Narrow terminals.** The band takes 60% of the columns Claude Code gives it, rounded down, and at most 84 cells. The meta row drops parts in this order: the tool count, then the trail, then the whole row. The timeline drops its totals before it shrinks below 8 cells. The focus row drops names from the end and keeps the second-guess count. When no name fits, it reads `∴ ⟲ 2`. When the count does not fit either, the count drops whole and the row reads `∴ …`, then `∴` alone. When the band is short on rows, it keeps the bottom ones. With no rows to draw in, it draws nothing. The top row stops 4 cells short of the right edge, clear of the band's `[-]` collapse mark. When the band's width comes to under 12 cells, it draws nothing.
+- **Surveys.** The band is hidden while Claude Code shows a survey.
+- **Glyph width.** The band counts every glyph it draws as one cell: `∴`, `×`, `·`, `◆`, `⟲`, `…`, `↓`, the timeline's blocks and the braille trail. A terminal set to draw ambiguous-width characters as two cells will misalign the rows.
 - **Main conversation only.** Subagent thinking and turns are ignored.
 - **Quiet by default.** The mod makes no model calls, network requests or file writes, unless you turn on the experimental [memory shadow log](#memory-shadow-log-experimental).
 
@@ -156,13 +181,13 @@ A spike that measures whether the session's thinking holds durable facts worth k
 With `memoryShadow` set to `on`, the mod does three things it never does otherwise. It sends quoted thinking, quoted tool output or answer text, and the repo's `origin` URL without its credentials, query string or fragment (the repo's directory name when there is no `origin`) to the model provider, on your account. It runs `git` to find the repo and `sh` to append to the log. It writes the log file. The append needs `/bin/sh`, so macOS, Linux or WSL. Leave the setting off on native Windows: with no absolute `HOME` nothing is judged or logged, and with one the judge call still runs and the append fails. After each main-loop turn that was not interrupted:
 
 1. Candidates come from the turn's thinking (thinking summaries must be on):
-   - **hedge**: the sentence after a "wait", "actually" or "hmm" that states something, not a plan or a question.
-   - **focus**: a name the turn came back to at least twice, with the thinking sentences that mention it.
+   - **hedge**: a span that runs from a second-guess marker (the markers the focus row counts) through the end of the next sentence. The rest of the marker's own sentence has to state something in at least 6 words, not a plan or a question. At most 4 per turn.
+   - **focus**: a name the turn came back to at least twice, with the last two thinking sentences that mention it. At most 3 per turn.
 2. Each candidate gets outcome evidence from the same turn: the last successful tool result that names it, else the sentence of the answer that names it. A candidate with no evidence is still logged, with `confirmed: false`.
 3. One Haiku call judges the turn's candidates (at most 6) against a keep/drop rubric: keep only a fact that stays true after the session (a decision and its reason, a constraint, a gotcha, an invariant). A turn with no candidates makes no call. The call runs after the turn has completed, so it never delays it.
-4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`, or to `$XDG_STATE_HOME/dreeft/memory-shadow.jsonl` when `XDG_STATE_HOME` is set to an absolute path: `code` (eight hex characters naming the selection and judging code that wrote the line, so lines from before and after a change to the marker or the rubric can be told apart), time, session, turn, project (the `origin` URL with its credentials, query string and fragment dropped, cut to one line of at most 200 characters, or the repo's directory name when there is no `origin`), `root` (the absolute path of the repo's main checkout), candidate source, `term` (the repeated name, for a focus candidate), span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`) and the judge's one-line `reason`, and for a keep the fact, keywords and importance, plus the memory type, name and topic a memory store could file the fact under. Each line also records the judge call's token usage.
+4. One JSON line per candidate is appended to `~/.local/state/dreeft/memory-shadow.jsonl`, or to `$XDG_STATE_HOME/dreeft/memory-shadow.jsonl` when `XDG_STATE_HOME` is set to an absolute path: `schema` (the record layout's version, now `2`), `code` (eight hex characters naming the selection and judging code that wrote the line, so lines from before and after a change to the marker or the rubric can be told apart), time, session, turn, project (the `origin` URL with its credentials, query string and fragment dropped, cut to one line of at most 200 characters, or the repo's directory name when there is no `origin`), `root` (the absolute path of the repo's main checkout), candidate source, `term` (the repeated name, for a focus candidate), span, evidence, `confirmed`, the verdict (`keep`, `drop`, or `error`) and the judge's one-line `reason`, and for a keep the fact, keywords and importance, plus the memory type, name and topic a memory store could file the fact under. Each line also records the judge call under `judge`: its `model` (the alias `haiku`), `candidates` (how many candidates the call judged) and its token usage.
 5. Spans and evidence quote your session, so anything shaped like a credential is replaced with `[redacted]` before the judge call and the log: the value of a secret-named key or header (`SECRET=`, `token:`, `DB_PASS=`, `pwd:`, `Cookie:`, `Authorization:`), a URL password, a private key block, a password flag after a command known to take one (`mysql -p`, `curl -u`, `docker login -p`, `--password`), a vendor token with its known prefix and length (GitHub, GitLab, AWS, Google, Slack, Stripe, npm, Hugging Face, SendGrid, age, a JWT) and the AWS secret key beside a key id. A tool result is redacted before it is cut to 2,000 characters, and a repeated name that is itself shaped like a credential is not a candidate. The match is by pattern, so it can miss a secret: one in a shape not listed here, a password flag after a command it does not know, or a JWT that the cut splits before its third part starts. The `dreeft` log directory is owner-only (`700`) and the log file is owner-only (`600`): both modes are set again on every append, so a file that was readable by others is tightened. Missing parent directories (`~/.local`, `~/.local/state`) are created with your own umask, as other tools create them. A `HOME` that is not an absolute path is refused: nothing is judged and nothing is logged.
-6. A name or span already judged in the session is not judged again.
+6. A name or span already judged in the session is not judged again. The mod remembers at most 500 of them: at 500 it forgets them all. It also forgets them when the mod reloads. After either, a name or span that comes up again is judged again.
 
 Read the kept facts:
 
@@ -185,11 +210,15 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 - A `ui.render` hook on `Spinner` notes the spinner's mode and draws the spinner unchanged. Render hooks can't write state, so the ticker applies the noted mode as a phase, up to a second late.
 - A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.
+- A `session.compact` hook adds the compaction mark to the trail. A compaction that was only precomputed, or that was skipped, adds none.
+- A `session.start` hook restarts the ticker when the mod reloads while a turn is still running.
+- A `tool.call` hook is registered only when the memory shadow log is on. It keeps each main-conversation tool result for the outcome evidence and returns the result unchanged.
 - A `ui.render` hook on the `AbovePrompt` band draws the rows from session state.
 - If a state update fails, the mod drops the update and the turn continues.
 
 | Path | Contents |
 | --- | --- |
+| `hooks/hooks.json` | Names `register.tsx` as the mod's hooks module |
 | `hooks/register.tsx` | Hooks, state atoms, render |
 | `hooks/focus.ts` | Pure: the focus scan over thinking text and tool arguments |
 | `hooks/turn.ts` | Pure: phase timeline, chunk reducer, context growth |
@@ -200,24 +229,27 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 | `hooks/shadow-io.ts` | Memory shadow log: the judge call and the log append |
 | `types/index.d.ts` | Shape of the mod's session state |
 | `hooks/*.test.ts` | Tests, run with the `claude-code/testing` kit |
+| `hooks/testkit.ts` | Helpers the tests share: a probe that reads the mod's state, and scripted steps |
 | `scripts/readme-images.ts` | Draws the images in `assets/` from the row builders in `hooks/rows.ts` |
 
 </details>
 
 ## Development
 
+The commands need Claude Code and Node.js, for `npx`. `npx` fetches the pinned TypeScript and bun, so you install neither.
+
 ```sh
 claude plugin test .                                           # run the tests
 claude plugin validate --strict .claude-plugin/plugin.json     # check manifest, hooks and declared state
 claude plugin validate --strict .claude-plugin/marketplace.json
 claude -p x --plugin-dir . || true                             # write .claude-plugin/types (no login needed)
-npx -p typescript@7.0.2 tsc -p .                               # type-check
-bun scripts/readme-images.ts                                   # redraw the README images
+npx -y -p typescript@7.0.2 tsc -p .                            # type-check
+npx -y bun@1.4.2 scripts/readme-images.ts                      # redraw the README images
 ```
 
 Type-checking needs `.claude-plugin/types/`. Claude Code writes that folder each time a session loads the mod from a local folder, such as with `--plugin-dir`. The folder is gitignored, so a fresh clone can't type-check until a session has loaded the mod once. The `claude -p x --plugin-dir .` line does that: Claude Code writes the folder before the login check, so the command fails with no login and still leaves the types behind. A marketplace install does not write the folder.
 
-CI runs all of these on every pull request, and fails when redrawing the images changes anything in `assets/`.
+CI runs all of these on every pull request and on every push to `main`, with the same TypeScript and bun versions, and fails when redrawing the images changes anything in `assets/`.
 
 The images in this README are drawn by `scripts/readme-images.ts` from the same row builders the band uses, fed one scripted turn. They are not screenshots. Redraw them after a change to a row's layout.
 
