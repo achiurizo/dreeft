@@ -92,7 +92,7 @@ A clone loaded with `--plugin-dir` is loaded for that session only. For a clone 
 - Plain words and directories don't count, and neither does a file with any other extension unless it is in backticks: `Make`, `makefile` and `main.cpp` are not file names. One exception, in the thinking text and in a search pattern: a path of three or more parts counts by its last part, whatever that part is. `src/hooks/utils` counts `utils`, and `src/hooks` counts nothing.
 - A name is 3 to 40 characters of printable ASCII. A shorter or longer name, or one with any other character, does not count.
 - A turn tracks at most 50 names. Past that, the name with the lowest count goes first, the oldest on a tie, so a name the turn keeps coming back to stays.
-- `⟲ 2` counts second-guesses: a sentence in the thinking that opens with "Wait,", "Actually," or "Hmm,", or that narrates a change of mind ("I realize", "turns out", "on closer inspection"). The same words used as verb or adverb ("wait for CI", "actually works") do not count. Shown in amber. Needs thinking summaries on.
+- `⟲ 2` counts second-guesses: a sentence in the thinking that opens with "Wait,", "Actually,", "Hmm,", "Oh,", "Oops," or "No,", or that narrates a change of mind ("I realize", "turns out", "on closer inspection", "reconsider"). The same words used as verb or adverb ("wait for CI", "actually works") do not count. Shown in amber. Needs thinking summaries on.
 - This is a word-count heuristic, not a summary, so it can pick the wrong names.
 
 ### Timeline: where the time goes
