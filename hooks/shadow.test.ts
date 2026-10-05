@@ -93,4 +93,24 @@ describe('createShadow', () => {
     expect(done?.tools).toHaveLength(200)
     expect(done?.tools[0]?.text.length).toBe(2_000)
   })
+
+  test('a token the 2k cut would split is redacted whole, not kept as a fragment', () => {
+    const shadow = open()
+    shadow.tool(bash('env'), ran(`${'r'.repeat(1_984)} ghp_${'0'.repeat(30)} ${'r'.repeat(3_000)}`))
+    expect(shadow.complete(DONE)?.tools[0]?.text).toBe(`${'r'.repeat(1_984)} [redacted]`)
+  })
+
+  test('a private key that opens before the cut and never ends is redacted to the end of the kept text', () => {
+    const shadow = open()
+    shadow.tool(bash('cat id'), ran(`${'r'.repeat(1_900)}\n-----BEGIN OPENSSH PRIVATE KEY-----\n${'0'.repeat(9_000)}`))
+    expect(shadow.complete(DONE)?.tools[0]?.text).toBe(`${'r'.repeat(1_900)}\n[redacted]`)
+  })
+
+  test('a token the end of the redacted slice splits is dropped, however much the text before it shrank', () => {
+    const shadow = open()
+    const key = `-----BEGIN PRIVATE KEY-----\n${'0'.repeat(1_500)}\n-----END PRIVATE KEY-----`
+    const rest = 'r'.repeat(3_013 - key.length)
+    shadow.tool(bash('cat id'), ran(`${key}${rest} ghp_${'0'.repeat(6)}${'0'.repeat(40)}`))
+    expect(shadow.complete(DONE)?.tools[0]?.text).toBe(`[redacted]${'r'.repeat(2_000 - key.length)}`)
+  })
 })

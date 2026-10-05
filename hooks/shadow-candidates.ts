@@ -30,17 +30,74 @@ const HEDGE_WINDOW = SPAN_MAX * 4
 const clip = (s: string, n: number) => (s.length <= n ? s : `${s.slice(0, n - 1)}…`)
 const squash = (s: string) => s.replace(/\s+/g, ' ').trim()
 
+/** A quoted value: an escaped quote does not end it, and one that never closes runs to the end of the text. */
+const QUOTED = String.raw`"(?:[^"\\]|\\[\s\S]?)*(?:"|$)|'(?:[^'\\]|\\[\s\S]?)*(?:'|$)`
+/** A value: quoted, else everything up to the next space, so `ab,cd;ef` goes whole. */
+const VALUE = String.raw`(?:${QUOTED}|\S+)`
+/** What follows a secret name: at most `NAME_TAIL` more name characters (a fixed bound keeps the match linear), then `:` or `=`. */
+const NAME_TAIL = 64
+const ASSIGN = String.raw`[\w.-]{0,${NAME_TAIL}}["']?\s*[:=]\s*`
+/** How far a credential flag may sit after its command word, and an AWS secret key after its key id: fixed, so the match is linear. */
+const FLAG_GAP = 200
+const AWS_GAP = 64
+
+/** A flag's value, only on the line of a command known to take a credential there: a bare `-p x` is `mkdir -p dir`. */
+const flag = (commands: string, flags: string, value = VALUE): [RegExp, string] =>
+  [new RegExp(String.raw`(\b(?:${commands})\b[^\n|;&]{0,${FLAG_GAP}}?\s(?:${flags}))(?![-<>|&;])${value}`, 'g'), '$1[redacted]']
+
+/** Commands whose `-p` or `--password` takes a password. `psql` is absent: its `-p` is a port. */
+const SQL = 'mysql|mysqldump|mysqladmin|mariadb|mongo|mongosh|mongodump|mongorestore'
+const LOGIN = String.raw`sshpass|(?:docker|podman)\s+login`
+
 /** Secret shapes a tool result or a thought can carry; the log and the judge never see them. */
 const SECRETS: [RegExp, string][] = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '[redacted]'],
-  [/(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/)[^\s/@]+(?::[^\s/]*)?@/gi, '$1[redacted]@'],
-  [/(?<![\w.-])([\w.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|private[_-]?key|credential)[\w.-]*["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, '$1[redacted]'],
+  // A password may hold a `/`; digits then a `/` after the colon are a port, not a password.
+  [/(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\/\/)(?:[^\s/@]+(?::[^\s/]*)?|[^\s/@:]*:(?!\d{1,5}[/?#])[^\s@]{0,256})@/gi, '$1[redacted]@'],
+  [/(https:\/\/hooks\.slack\.com\/services\/)T[A-Z0-9]{6,14}\/B[A-Z0-9]{6,14}\/[A-Za-z0-9]{20,}/g, '$1[redacted]'],
+  // `pass` only after a separator: `bypass=true` and a test count `pass: 177` are not secrets.
+  [new RegExp(String.raw`((?:secret|token|passw(?:or)?d|passphrase|(?<=[_.-])pass(?![a-z])|api[_-]?key|access[_-]?key|private[_-]?key|signing[_-]?key|encryption[_-]?key|credential|x-auth|x-amz-signature)${ASSIGN})${VALUE}`, 'gi'), '$1[redacted]'],
+  // Case matters here: `pwd:` and `DB_PWD=` are keys, the shell's own `PWD=/home/me` is not.
+  [new RegExp(String.raw`((?:(?<![A-Za-z])(?:pwd|Pwd)|(?<=[_-])PWD)(?![A-Za-z])${ASSIGN})${VALUE}`, 'g'), '$1[redacted]'],
+  // A cookie header is secret to the end of its line; `Cookie banner: shown` has no colon after the name.
+  [new RegExp(String.raw`((?<![a-z])cookie["']?:[ \t]*)(?:${QUOTED}|[^\r\n"']+)`, 'gi'), '$1[redacted]'],
+  [/(\bauthorization["']?\s*[:=]\s*["']?)(?:((?:token|apikey|negotiate|ntlm)\s+)[\w.~+/=-]{8,}|[\w.~+/=-]{20,})/gi, '$1$2[redacted]'],
   [/\b((?:bearer|basic)\s+)[\w.~+/=-]{8,}/gi, '$1[redacted]'],
-  [/\b(?:sk|pk|rk)[-_](?:live|test|ant|proj)[-_][\w-]{8,}|\bsk-[\w-]{20,}|\bgh[pousr]_\w{20,}|\bgithub_pat_\w{20,}|\bxox[abprs]-[\w-]{10,}|\bAKIA[0-9A-Z]{16}\b|\beyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}/g, '[redacted]'],
+  flag(`${SQL}|${LOGIN}|curl|wget|redis-cli`, String.raw`--pass(?:word|wd|phrase)?\s+`),
+  flag(`${SQL}|${LOGIN}`, String.raw`-p\s*`),
+  flag('redis-cli', String.raw`-a\s+`),
+  // `curl -u name` alone prompts for the password: only `name:password` carries one.
+  flag('curl', String.raw`-u\s*|--(?:proxy-)?user[ =]\s*`, String.raw`(?:${QUOTED}|[^\s:'"]+:\S+)`),
+  [/(\bhtpasswd\s+-[A-Za-z0-9]*b[A-Za-z0-9]*\s+\S+\s+\S+\s+)\S+/g, '$1[redacted]'],
+  // The 40 characters after a key id are its secret key; the id itself goes with the tokens below.
+  [new RegExp(String.raw`(\b(?:AKIA|ASIA)[0-9A-Z]{16}\b[\s\S]{0,${AWS_GAP}}?)(?<![A-Za-z0-9/+=])[A-Za-z0-9/+]{40}(?![A-Za-z0-9/+=])`, 'g'), '$1[redacted]'],
+  // Each prefix needs its vendor's length after it: `hf_hub_download` and `npm_config_registry` are names.
+  [/\b(?:sk|pk|rk)[-_](?:live|test|ant|proj)[-_][\w-]{8,}|\bsk-[\w-]{20,}|\bgh[pousr]_\w{20,}|\bgithub_pat_\w{20,}|\bxox[abprs]-[\w-]{10,}|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b|(?<![\w-])eyJ[\w-]{10,}\.[\w-]{10,}\.[\w-]{10,}|\bAIza[\w-]{35,}|\bgl(?:pat|dt|rt|ptt|cbt)-[\w.-]{20,}|\bnpm_[A-Za-z0-9]{36,}|\bhf_[A-Za-z0-9]{34,}|\bSG\.[\w-]{22}\.[\w-]{43,}|\bwhsec_[A-Za-z0-9+/=]{32,}|\bya29\.[\w.-]{20,}|\bAGE-SECRET-KEY-1[0-9A-Z]{58,}/g, '[redacted]'],
 ]
 
 /** `text` with anything shaped like a credential replaced by `[redacted]`. */
 export const redact = (text: string) => SECRETS.reduce((s, [re, to]) => s.replace(re, to), text)
+
+/**
+ * How far past a cut `redactHead` reads, so a shape the cut would split is seen whole: over twice
+ * the longest bounded shape (a command word, its `FLAG_GAP` and a flag value; a 256-character URL
+ * password) and the length of an ordinary JWT, which is recognised only once its third part starts.
+ */
+export const REDACT_OVERLAP = 1024
+
+/**
+ * The first `max` characters of `text`, redacted. Only a slice of `max + REDACT_OVERLAP` is read,
+ * so the cost does not grow with `text`; a shape that opens before the cut is redacted to its end.
+ */
+export function redactHead(text: string, max: number): string {
+  const slice = text.slice(0, max + REDACT_OVERLAP)
+  const head = redact(slice)
+  if (slice.length === text.length) return head.slice(0, max)
+  // The slice's own end may split a shape: drop the tail no shape touched, at most the overlap.
+  let same = 0
+  while (same < REDACT_OVERLAP && same < head.length && head.at(-1 - same) === slice.at(-1 - same)) same++
+  return head.slice(0, head.length - same).slice(0, max)
+}
 
 /** How much of one sentence is redacted: the clip to `SPAN_MAX` or `SNIPPET_MAX` follows anyway. */
 const REDACT_WINDOW = SPAN_MAX * 4
@@ -74,7 +131,7 @@ const PLAN = /^[\s,.:;!-]*(let me|let's|i'll|i will|i need|i should|i want|i'm g
 export const SELECTION = [
   HEDGE.source, HEDGE.flags, PLAN.source, PLAN.flags, SCAN,
   ...SECRETS.flatMap(([shape, to]) => [shape.source, shape.flags, to]),
-  HEDGE_MAX, FOCUS_CANDIDATES, CANDIDATE_MAX, MIN_WORDS, FOCUS_MIN, SPAN_MAX, SNIPPET_MAX,
+  HEDGE_MAX, FOCUS_CANDIDATES, CANDIDATE_MAX, MIN_WORDS, FOCUS_MIN, SPAN_MAX, SNIPPET_MAX, REDACT_OVERLAP,
 ].join('\n')
 
 /**
@@ -130,7 +187,7 @@ export function findEvidence(turn: ShadowTurn, terms: string[]): Evidence | null
     if (u.isError) continue
     const hit = terms.find(t => u.terms.includes(t) || u.text.includes(t))
     if (hit === undefined || u.text.trim() === '') continue
-    // Redacted before the cut, so a secret the cut would split is still recognised whole.
+    // Redacted before the snippet cut. `u.text` was already cut to 2,000 characters when buffered, after `redactHead`.
     const text = redact(u.text)
     return { from: 'tool', tool: u.name, snippet: around(text, text.includes(hit) ? hit : null) }
   }

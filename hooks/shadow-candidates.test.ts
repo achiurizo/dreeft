@@ -2,7 +2,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { SCAN } from './focus'
 import type { ShadowTurn, ToolEvidence } from './shadow'
-import { SELECTION, SPAN_MAX, findEvidence, hedgeSpans, redact, repeatedTerms, selectCandidates } from './shadow-candidates'
+import { REDACT_OVERLAP, SELECTION, SPAN_MAX, findEvidence, hedgeSpans, redact, repeatedTerms, selectCandidates } from './shadow-candidates'
 
 const tool = (over: Partial<ToolEvidence> = {}): ToolEvidence => ({ name: 'Bash', terms: [], text: '', isError: false, ...over })
 const turnOf = (over: Partial<ShadowTurn> = {}): ShadowTurn => ({ turnId: 't1', thinking: '', text: '', tools: [], ...over })
@@ -64,6 +64,78 @@ describe('redact', () => {
   test('ordinary code and prose pass through', () => {
     const text = 'const key = tokens.length; see hooks/turn.ts:12 and user@example.com'
     expect(redact(text)).toBe(text)
+  })
+  test('a vendor token is recognised by its prefix and its length', () => {
+    const x = (n: number) => 'x'.repeat(n)
+    const zeros = (n: number) => '0'.repeat(n)
+    const tokens = [
+      `AIza${x(35)}`, `glpat-${x(20)}`, `npm_${x(36)}`, `hf_${x(34)}`, `SG.${x(22)}.${x(43)}`,
+      `whsec_${x(32)}`, `ya29.${x(40)}`, `ASIA${zeros(16)}`, `AGE-SECRET-KEY-1${zeros(58)}`,
+    ]
+    for (const t of tokens) expect(redact(`got ${t} back`)).toBe('got [redacted] back')
+    expect(redact(`post to https://hooks.slack.com/services/T${zeros(8)}/B${zeros(8)}/${x(24)} now`))
+      .toBe('post to https://hooks.slack.com/services/[redacted] now')
+  })
+  test('an AWS secret key beside its key id goes with it', () => {
+    expect(redact(`AKIAIOSFODNN7EXAMPLE ${'x'.repeat(40)} us-east-1`)).toBe('[redacted] [redacted] us-east-1')
+    expect(redact(`AKIAIOSFODNN7EXAMPLE,${'x'.repeat(40)}`)).toBe('[redacted],[redacted]')
+  })
+  test('a credential passed as a flag to a command that takes one is redacted', () => {
+    expect(redact('mysql -u root --password hunter2 shop')).toBe('mysql -u root --password [redacted] shop')
+    expect(redact('mysql -uroot -phunter2 shop')).toBe('mysql -uroot -p[redacted] shop')
+    expect(redact('mysqldump -u root -p hunter2')).toBe('mysqldump -u root -p [redacted]')
+    expect(redact('curl -u admin:hunter2 https://host/x')).toBe('curl -u [redacted] https://host/x')
+    expect(redact('docker login -u bob -p hunter2 registry.io')).toBe('docker login -u bob -p [redacted] registry.io')
+    expect(redact('sshpass -p hunter2 ssh host')).toBe('sshpass -p [redacted] ssh host')
+    expect(redact('redis-cli -h cache -a hunter2 ping')).toBe('redis-cli -h cache -a [redacted] ping')
+    expect(redact('htpasswd -b .htpasswd bob hunter2')).toBe('htpasswd -b .htpasswd bob [redacted]')
+  })
+  test('a short or header-style secret name loses its value too', () => {
+    expect(redact('DB_PASS=hunter2 PORT=3000')).toBe('DB_PASS=[redacted] PORT=3000')
+    expect(redact('PASSPHRASE=hunter2')).toBe('PASSPHRASE=[redacted]')
+    expect(redact('pwd: hunter2')).toBe('pwd: [redacted]')
+    expect(redact('SIGNING_KEY=abc123 ENCRYPTION_KEY=abc123')).toBe('SIGNING_KEY=[redacted] ENCRYPTION_KEY=[redacted]')
+    expect(redact('Cookie: session=abc123; theme=dark\nAccept: */*')).toBe('Cookie: [redacted]\nAccept: */*')
+    expect(redact('Set-Cookie: sid=abc123; HttpOnly')).toBe('Set-Cookie: [redacted]')
+    expect(redact('X-Auth-Token: abc123')).toBe('X-Auth-Token: [redacted]')
+    expect(redact('X-Auth: abc123')).toBe('X-Auth: [redacted]')
+    expect(redact('Authorization: Token 0123456789abcdef')).toBe('Authorization: Token [redacted]')
+    expect(redact('GET /obj?X-Amz-Signature=0123456789abcdef')).toBe('GET /obj?X-Amz-Signature=[redacted]')
+  })
+  test('a bare value goes whole, up to the next space', () => {
+    expect(redact('PASSWORD=ab,cd;ef next')).toBe('PASSWORD=[redacted] next')
+  })
+  test('a quoted value goes whole: past an escaped quote, and to the end when the quote never closes', () => {
+    expect(redact(String.raw`password: "ab\"cd ef" next`)).toBe('password: [redacted] next')
+    expect(redact('password: "ab cd ef')).toBe('password: [redacted]')
+  })
+  test('a URL password holding a slash goes, the host stays', () => {
+    expect(redact('https://user:pa/ss@host/db')).toBe('https://[redacted]@host/db')
+  })
+  test('ordinary names, flags and words that look like a secret shape pass through', () => {
+    const plain = [
+      'hf_hub_download', 'npm_config_registry', 'npm_package_version', 'mkdir -p dir', 'ssh -p 22 host',
+      'docker run -p 8080:80 img', 'git log -p file.ts', 'psql -p 5432 shop', 'passed: 174', 'pass: 177', 'bypass=true',
+      'compass: north', 'pwd', 'cd "$(pwd)"', 'PWD=/home/user/code', 'It ships to SG.', 'ASIAN markets', 'whsec',
+      'Cookie banner: shown', 'Each token in the list is counted once, then the token count is printed.', 'curl -u',
+      'curl --user-agent "probe: one" https://host/x', 'signature: (a: string) => void',
+      'http://localhost:3000/@scope/pkg', 'https://example.com:8080/users?email=a@b.com',
+    ]
+    for (const text of plain) expect(redact(text)).toBe(text)
+  })
+  test('a megabyte built to stress one shape costs about what prose does', () => {
+    const fill = (unit: string) => unit.repeat(Math.ceil(1_000_000 / unit.length))
+    const stress = [
+      'AIza', 'npm_', 'hf_', 'SG.', 'ya29.', 'whsec_', 'glpat-', 'ASIA', 'AGE-SECRET-KEY-1', 'eyJ-', 'token', 'pass_', '=', ':', '"', "'",
+      'token="', String.raw`token="\"`, 'a://', 'a://a:', 'mysql ', 'curl -u ', 'htpasswd -b ', 'cookie:', 'authorization: ',
+      'AKIAIOSFODNN7EXAMPLE ', `AKIAIOSFODNN7EXAMPLE${' '.repeat(100_000)}`, `AKIAIOSFODNN7EXAMPLE ${'x'.repeat(39)} `,
+      'https://hooks.slack.com/services/T', '-----BEGIN A',
+    ].map(fill)
+    for (const text of stress) {
+      const from = performance.now()
+      redact(text)
+      expect(performance.now() - from).toBeLessThan(1000)
+    }
   })
 })
 
@@ -146,6 +218,10 @@ describe('selectCandidates', () => {
     const unbroken = `\`trailOf\` ${'token.'.repeat(3000)} \`trailOf\``
     expect(elapsed(turnOf({ thinking: unbroken, text: unbroken }))).toBeLessThan(1000)
   })
+  test('a name that only starts like a vendor token is still a focus candidate', () => {
+    const got = selectCandidates(turnOf({ thinking: 'The loader calls `hf_hub_download` once. Then `hf_hub_download` caches the file on disk.' }))
+    expect(got.map(c => c.term)).toEqual(['hf_hub_download'])
+  })
   test('a name only tool calls repeated is not a candidate', () => {
     expect(selectCandidates(turnOf({ tools: [tool({ terms: ['a.ts'] }), tool({ terms: ['a.ts'] })] }))).toEqual([])
   })
@@ -155,6 +231,9 @@ describe('SELECTION', () => {
   test('holds the redaction shapes, so a change to what the log hides shows in the code stamp', () => {
     expect(SELECTION).toContain('PRIVATE KEY')
     expect(SELECTION).toContain('[redacted]')
+  })
+  test('holds the overlap a tool result is redacted with, so a change to it shows in the code stamp', () => {
+    expect(SELECTION.split('\n')).toContain(String(REDACT_OVERLAP))
   })
   test('holds the patterns that decide what a name is', () => {
     expect(SELECTION).toContain(SCAN)
