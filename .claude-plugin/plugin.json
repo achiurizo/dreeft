@@ -8,6 +8,9 @@
   },
   "homepage": "https://github.com/achiurizo/dreeft",
   "repository": "https://github.com/achiurizo/dreeft",
+  "documentationUrl": "https://github.com/achiurizo/dreeft#readme",
+  "supportUrl": "https://github.com/achiurizo/dreeft/issues",
+  "privacyPolicyUrl": "https://github.com/achiurizo/dreeft/blob/main/PRIVACY.md",
   "license": "MIT",
   "keywords": [
     "mod",
