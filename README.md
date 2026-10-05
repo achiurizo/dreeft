@@ -205,6 +205,8 @@ Two of the mod's hooks have the name of an engine call, so they see that call wh
 
 `hooks/shadow-candidates.ts` holds the patterns that find credentials to redact. Those patterns name commands such as `curl`, `wget` and `mysql` and their password flags. The file downloads nothing and runs nothing.
 
+`hooks/shadow-candidates.test.ts` tests that redaction. It spells made-up values in the shapes the redactor has to catch: a GitHub token of the form `ghp_0123456789...`, a Slack webhook URL under `hooks.slack.com` filled with zeros, an AWS key id. None is a real credential. The test passes each string to the redactor and compares the result. It reads no environment variable and no file, and sends nothing. The mod itself reads no credential from your machine, and the tests run only when you run `claude plugin test .`.
+
 ## Memory shadow log (experimental)
 
 A spike that measures whether the session's thinking holds durable facts worth keeping as memories. It only logs. It never writes to a memory store, never stages memory candidates, and never changes the turn. The band shows nothing new.
