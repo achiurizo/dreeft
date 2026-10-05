@@ -106,15 +106,17 @@ Each cell is two lanes, thinking on top and tools below:
 | Cell | Phase |
 | --- | --- |
 | `▀` | Thinking |
-| `▄` | Calling or running a tool |
-| `█` | Writing the answer |
+| `▄` | Tools running |
+| `█` | The model writing: answer text or a tool call's arguments |
 | blank | Waiting on the model |
 
 A dim `▕` closes the strip, so trailing waiting time still reads as time.
 
 After the strip, the time spent in each phase: `think 11s · tools 13s · write 5s`. A phase under half a second reads `<1s`. A phase with no time is left out. A minute or more reads `1m5s`. Waiting has no total.
 
-Phases come from two sources: the model's chunks, and the mode of Claude Code's own spinner line (requesting, thinking, responding, tool input, tool use). The spinner still reports thinking when thinking summaries are off and no thinking text streams.
+Tool time starts when the model's response has ended and its tool calls start to run. It ends when the model is asked again or the turn completes. The time the model takes to stream a tool call's arguments is writing, so a long `Write` call reads as writing, not as a slow tool. Tool time is that whole gap, not a measured duration per tool, so a wait on a permission prompt counts.
+
+Phases come from three sources: the model's chunks, the end of each response, and the mode of Claude Code's own spinner line. The spinner's modes map to phases: requesting is waiting, thinking is thinking, responding and tool input are writing, tool use is tools running. The spinner still reports thinking when thinking summaries are off and no thinking text streams.
 
 ### Meta: what the turn costs
 
@@ -207,7 +209,7 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 <details>
 <summary>Hooks and files</summary>
 
-- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, and block and tool counts. When a step ends, its tool calls' arguments add to the focus counts.
+- A streaming `turn.step` hook watches the model's chunks and passes every chunk on unchanged. Each chunk updates the turn's phase spans, focus counts, and block and tool counts. When a step ends, its tool calls' arguments add to the focus counts, and a step with tool calls enters the tool phase.
 - A `ui.render` hook on `Spinner` notes the spinner's mode and draws the spinner unchanged. Render hooks can't write state, so the ticker applies the noted mode as a phase, up to a second late.
 - A one-second ticker runs only while a main-loop turn is running, so the timeline grows between steps while tools run. It stops when the turn completes.
 - `session.measure` and each step's usage keep a running context size. `turn.complete` adds the turn's growth to the trail.

@@ -189,6 +189,11 @@ export const register: Register = (on, options) => {
         // The step's tool calls name what the turn touches, even when no thinking text streams.
         const terms = step.value.toolUses.flatMap(u => attempt(() => toolTerms(u.input)) ?? [])
         if (terms.length > 0) await safely(() => update($, turn, t => t && { ...t, focus: addTerms(t.focus, terms) }))
+        // The stream is over and the calls are written: from here the tools run, until the next step waits.
+        if (step.value.toolUses.length > 0) await safely(async () => {
+          const now = await $.clock.now()
+          await update($, turn, t => t && enterPhase(t, 'tool', now))
+        })
         return step.value
       }
       const chunk = step.value

@@ -109,6 +109,24 @@ test('a tool\'s streamed arguments cost no state write', WITH_PROBE, async ($, o
   expect(await probe($)).toMatchObject({ tools: 1 })
 })
 
+test('the tool phase costs one state write when a step with tool calls ends, and none when it has no calls', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  let writes = 0
+  on('state.set', async (_$, e, next) => {
+    writes++
+    return next(e)
+  })
+  const tool: TurnStepChunk = { kind: 'tool', index: 1, id: 'tu1', name: 'Bash' }
+  // Empty arguments name nothing, so the focus write stays out of the count.
+  beneath(on, [tool], { chunks: [tool], toolUses: [{ name: 'Bash', input: {} }] })
+  await drain($.turn.step(STEP))
+  const without = writes
+  writes = 0
+  await drain($.turn.step(STEP))
+  expect(writes).toBe(without + 1)
+  expect((await probe($))?.spans.at(-1)?.phase).toBe('tool')
+})
+
 test('when every state write throws, steps still pass each chunk through and turn.complete still answers', WITH_PROBE, async ($, on) => {
   mock.clock(on)
   answerBelow(on)
