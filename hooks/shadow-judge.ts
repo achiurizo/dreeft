@@ -1,6 +1,7 @@
 // Memory shadow mode (experimental): the judge's prompt, its untrusted reply as verdicts, and
 // the log records. Pure.
 
+import { SELECTION } from './shadow-candidates'
 import type { Candidate, Evidence } from './shadow-candidates'
 
 /** The judge's answer for one candidate. */
@@ -23,7 +24,9 @@ export type JudgeMeta = { model: string; candidates: number; input_tokens: numbe
 
 /** One JSONL line in the shadow log: one candidate and its verdict. */
 export type ShadowRecord = {
-  schema: 1
+  schema: 2
+  /** Which selection and judging code wrote the record: `CODE` of the module in memory. */
+  code: string
   ts: string
   session: string
   turn: string
@@ -71,6 +74,22 @@ Rules:
   reusable approach. Lowercase letters, digits, hyphens.
 - keywords: 2 to 6 single terms.
 - importance: "high" for a decision or a gotcha that cost time, else "medium".`
+
+/** `parts` as eight hex characters (FNV-1a): equal parts give equal characters, a changed part or a moved boundary does not. */
+export function fingerprint(parts: string[]): string {
+  let hash = 0x811c9dc5
+  for (const ch of parts.join('\0')) hash = Math.imul(hash ^ (ch.codePointAt(0) ?? 0), 0x01000193)
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+/** Bump on a change to selection or judging that `SELECTION` and `JUDGE_SYSTEM` do not show: logic, not a pattern, a limit or the rubric. */
+const REV = 1
+
+/**
+ * The stamp on every record. Taken from the loaded module, not from the checkout: a session that
+ * was running when the mod changed can keep old code, and the session id does not show it.
+ */
+export const CODE = fingerprint([String(REV), SELECTION, JUDGE_SYSTEM])
 
 /** The judge's one user message: the project and each candidate with its evidence. */
 export function judgePrompt(project: string, candidates: Candidate[]): string {
@@ -154,7 +173,8 @@ export type RecordContext = { ts: string; session: string; turn: string; project
 /** One log record per candidate, its verdict and the judge call's cost attached. */
 export function buildRecords(ctx: RecordContext, candidates: Candidate[], verdicts: Verdict[], judge: JudgeMeta): ShadowRecord[] {
   return candidates.map((c, i) => ({
-    schema: 1,
+    schema: 2,
+    code: CODE,
     ...ctx,
     source: c.source,
     term: c.term ?? null,

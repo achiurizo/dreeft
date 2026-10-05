@@ -67,6 +67,12 @@ function sentences(text: string): { at: number; s: string }[] {
 const PLAN = /^[\s,.:;!-]*(let me|let's|i'll|i will|i need|i should|i want|i'm going|now|ok(ay)?\b|so\b)/i
 
 /**
+ * Everything that decides which spans become candidates, as one string: the marker, the plan
+ * filter and the limits. The log's code stamp is taken over it, so a change here shows in the log.
+ */
+export const SELECTION = [HEDGE.source, HEDGE.flags, PLAN.source, PLAN.flags, HEDGE_MAX, FOCUS_CANDIDATES, CANDIDATE_MAX, MIN_WORDS, FOCUS_MIN, SPAN_MAX, SNIPPET_MAX].join('\n')
+
+/**
  * Hedge-then-correction spans, the first `HEDGE_MAX`: from a second-guess marker through the end
  * of the next sentence, kept when what follows the marker is a statement of at least `MIN_WORDS`
  * words, not a plan or a question.

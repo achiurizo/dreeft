@@ -65,7 +65,7 @@ test('a turn with a candidate: one judge call, one record per candidate appended
   const records = recordsOf(w.appended)
   expect(records).toHaveLength(1)
   expect(records[0]).toMatchObject({
-    schema: 1, ts: '2026-10-02T00:00:00.000Z', session: expect.any(String), turn: 't1', project: 'https://github.com/a/b.git', root: '/repo',
+    schema: 2, code: expect.stringMatching(/^[0-9a-f]{8}$/), ts: '2026-10-02T00:00:00.000Z', session: expect.any(String), turn: 't1', project: 'https://github.com/a/b.git', root: '/repo',
     source: 'hedge', span: THINKING, confirmed: false, verdict: 'keep', topic: 'context-dreeft', importance: 'high',
     judge: { model: 'haiku', candidates: 1, input_tokens: 900, output_tokens: 80 },
   })
