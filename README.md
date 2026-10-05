@@ -141,7 +141,7 @@ Growth and the trail are absent until Claude Code has reported the context's siz
 ## Requirements
 
 - Claude Code v2.1.287 or later, which added mods. The mod API is still early access, so a Claude Code update can break the mod until it catches up.
-- The terminal surface. Desktop, VS Code and mobile get nothing for now.
+- The terminal surface. The desktop app gets the band only when you set [`desktop`](#settings) to `on`, which is experimental and has not been checked. VS Code and mobile get nothing.
 - Optional: thinking summaries turned on in `~/.claude/settings.json`:
 
   ```json
@@ -158,6 +158,7 @@ Growth and the trail are absent until Claude Code has reported the context's siz
 | --- | --- | --- |
 | `palette` | `mono` | Timeline colors. `mono` uses brightness only (thinking plain, tools dim). `amber` and `blue` color thinking and keep tools dim. `magenta` colors thinking magenta and tools cyan. |
 | `memoryShadow` | `off` | `on` turns on the experimental memory shadow log. See below. |
+| `desktop` | `off` | Experimental. `on` also draws the band in the Claude Code desktop app. The band's drawing there has not been checked. When you try it, look at the braille trail, the dim text, the palette colors and the band's width. `off` draws on the terminal only. VS Code and mobile get nothing with either value. |
 
 Change it with `/config`, or in `~/.claude/settings.json`:
 

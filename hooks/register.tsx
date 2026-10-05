@@ -84,11 +84,13 @@ const PALETTES = {
 } satisfies Record<string, Palette>
 const isPalette = (name: unknown): name is keyof typeof PALETTES => typeof name === 'string' && Object.hasOwn(PALETTES, name)
 
-/** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass. */
+/** Registers the mod's hooks; `options.palette` picks the timeline palette, `options.memoryShadow` adds the shadow pass, `options.desktop` adds the desktop surface. */
 export const register: Register = (on, options) => {
   const palette: Palette = PALETTES[isPalette(options.palette) ? options.palette : 'mono']
   const ink: Record<Tone, Ink> = { faint: { color: 'gray', dimColor: true }, dim: { dimColor: true }, bright: {}, warn: { color: 'yellow' }, ...palette }
   const shadow = options.memoryShadow === 'on' ? createShadow() : null
+  // Only the exact value opts in: the band's drawing on the desktop app is unchecked, so anything else is off.
+  const onDesktop = options.desktop === 'on'
   /** What the shadow pass already judged this session. */
   const seen = new Set<string>()
 
@@ -218,7 +220,8 @@ export const register: Register = (on, options) => {
     const turns = await read($, trail) // never `h`: that name is the JSX factory
     const c = await read($, ctx)
     const width = bandWidth(e.props.bodyColumns)
-    if (e.surface !== 'terminal' || e.props.hasSurvey || !t || width === null) return next(e)
+    const drawsHere = e.surface === 'terminal' || (onDesktop && e.surface === 'desktop')
+    if (!drawsHere || e.props.hasSurvey || !t || width === null) return next(e)
     const rows = bandRows(t, turns, c, width, e.props.maxRows)
 
     const { Box, Text } = $.ui.resolve(e)

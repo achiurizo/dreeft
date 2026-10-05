@@ -189,6 +189,47 @@ test('draws nothing on the desktop surface', async ($, on) => {
   await step.end()
 })
 
+test('desktop on: the desktop surface draws the same rows as the terminal', { options: { desktop: 'on' } }, async ($, on) => {
+  mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'check `metaRow` then `metaRow` again. Wait, ')
+  const terminal = await joined(await mount($))
+  expect(terminal).toContain('∴ metaRow ×2')
+  expect(await joined(await mount($, {}, 'desktop'))).toBe(terminal)
+  await step.end()
+})
+
+test('desktop on: still nothing on VS Code or mobile', { options: { desktop: 'on' } }, async ($, on) => {
+  mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'weighing ')
+  // The control: without it, empty remote surfaces would prove nothing about the setting.
+  expect(await joined(await mount($, {}, 'desktop'))).not.toBe('')
+  expect(await joined(await mount($, {}, 'vscode'))).toBe('')
+  expect(await joined(await mount($, {}, 'mobile'))).toBe('')
+  await step.end()
+})
+
+test('desktop on: the desktop surface still yields to a survey and to a narrow band', { options: { desktop: 'on' } }, async ($, on) => {
+  mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'weighing ')
+  expect(await joined(await mount($, {}, 'desktop'))).not.toBe('')
+  expect(await joined(await mount($, { hasSurvey: true }, 'desktop'))).toBe('')
+  expect(await joined(await mount($, { bodyColumns: 19 }, 'desktop'))).toBe('')
+  await step.end()
+})
+
+test('an unknown desktop value is off: the terminal draws, the desktop surface does not', { options: { desktop: 'yes' } }, async ($, on) => {
+  // The load unsets a value the manifest does not list and fills in the default, so this pins the whole path.
+  mock.clock(on)
+  engineBand(on)
+  const step = await thinking($, on, 'weighing ')
+  expect(await joined(await mount($))).not.toBe('')
+  expect(await joined(await mount($, {}, 'desktop'))).toBe('')
+  await step.end()
+})
+
 test('the top row stays clear of the band\'s [-] corner', async ($, on) => {
   mock.clock(on)
   engineBand(on)
