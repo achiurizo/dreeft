@@ -50,9 +50,9 @@ export function timelineCells(spans: Span[], start: number, end: number, maxCell
   })
 }
 
-/** The spinner's own word for what the turn is doing, as a phase. */
+/** The spinner's own word for what the turn is doing, as a phase; a tool call streaming in (`tool-input`) is the model writing. */
 export function phaseOfMode(mode: 'requesting' | 'responding' | 'thinking' | 'tool-input' | 'tool-use'): Phase {
-  return mode === 'thinking' ? 'think' : mode === 'responding' ? 'write' : mode === 'requesting' ? 'wait' : 'tool'
+  return mode === 'thinking' ? 'think' : mode === 'tool-use' ? 'tool' : mode === 'requesting' ? 'wait' : 'write'
 }
 
 /**
@@ -110,7 +110,7 @@ function flush(t: TurnMeta): TurnMeta {
 /** The chunk kinds `reduceChunk` folds; any other kind leaves the turn as it was. */
 export const FOLDED: ReadonlySet<TurnStepChunk['kind']> = new Set(['thinking', 'text', 'tool', 'stop'])
 
-/** Fold one main-loop chunk into the turn. */
+/** Fold one main-loop chunk into the turn; no chunk enters `tool`, which starts when the step's stream ends. */
 export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): TurnMeta {
   switch (chunk.kind) {
     case 'thinking': {
@@ -131,7 +131,8 @@ export function reduceChunk(t: TurnMeta, chunk: TurnStepChunk, now: number): Tur
     case 'text':
       return { ...enterPhase(flush(t), 'write', now), lastChunk: 'text' }
     case 'tool':
-      return { ...enterPhase(flush(t), 'tool', now), tools: t.tools + 1, lastChunk: 'tool' }
+      // The chunk marks the call's start: its arguments are still to stream, so the model is writing.
+      return { ...enterPhase(flush(t), 'write', now), tools: t.tools + 1, lastChunk: 'tool' }
     case 'stop':
       return { ...t, now, lastChunk: 'stop' }
     default:

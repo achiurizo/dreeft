@@ -64,10 +64,21 @@ describe('reduceChunk', () => {
     expect(t.blocks).toBe(1)
   })
 
-  test('a tool chunk opens a tool span and counts the tool', () => {
+  test('a tool chunk counts the tool and opens a write span: the model is writing the call', () => {
     const t = reduceChunk(t0, { kind: 'tool', index: 1, id: 'x', name: 'Bash' }, 500)
     expect(t.tools).toBe(1)
-    expect(t.spans.at(-1)).toEqual({ phase: 'tool', at: 500 })
+    expect(t.spans.at(-1)).toEqual({ phase: 'write', at: 500 })
+  })
+
+  test('answer text and several tool calls in a row are one write span, each call counted once', () => {
+    let t = reduceChunk(t0, { kind: 'text', index: 0, text: 'ok' }, 100)
+    t = reduceChunk(t, { kind: 'tool', index: 1, id: 'x', name: 'Read' }, 200)
+    t = reduceChunk(t, { kind: 'tool', index: 2, id: 'y', name: 'Edit' }, 300)
+    expect(t.spans).toEqual([
+      { phase: 'wait', at: 0 },
+      { phase: 'write', at: 100 },
+    ])
+    expect(t.tools).toBe(2)
   })
 
   test('text opens a write span; thinking after it is a new block', () => {
@@ -128,8 +139,8 @@ describe('usage', () => {
 })
 
 describe('phaseOfMode', () => {
-  test('maps every spinner mode to a phase', () => {
-    expect((['requesting', 'thinking', 'responding', 'tool-input', 'tool-use'] as const).map(m => phaseOfMode(m))).toEqual(['wait', 'think', 'write', 'tool', 'tool'])
+  test('maps every spinner mode to a phase: a tool call streaming in is writing, a tool running is tool', () => {
+    expect((['requesting', 'thinking', 'responding', 'tool-input', 'tool-use'] as const).map(m => phaseOfMode(m))).toEqual(['wait', 'think', 'write', 'write', 'tool'])
   })
 })
 

@@ -14,7 +14,9 @@ async function thinking($: Engine, on: On, text: string, then: TurnStepChunk[] =
     yield { kind: 'thinking', index: 0, text }
     await held
     for (const chunk of then) yield chunk
-    return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: null }
+    // The result names each call the stream began, so the step's end starts tool time.
+    const toolUses = then.flatMap(c => (c.kind === 'tool' ? [{ name: c.name, input: {} }] : []))
+    return { turnId: e.turnId, index: e.index, answer: '', toolUses, stopReason: 'end_turn', usage: null }
   })
   await before?.()
   const stream = $.turn.step(STEP)

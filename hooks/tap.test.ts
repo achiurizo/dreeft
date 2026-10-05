@@ -45,21 +45,55 @@ test('a step closed early closes the stream beneath', async ($, on) => {
   expect(closed).toBe(true)
 })
 
-test('a step records its phases and counts its block and tool', WITH_PROBE, async ($, on) => {
+/** The tool call `THINK_THEN_TOOL` streams, as the step's result reports it. */
+const BASH = [{ name: 'Bash', input: {} }]
+
+test('a step records its phases and counts its block and tool: tool time starts when its stream ends', WITH_PROBE, async ($, on) => {
   mock.clock(on)
-  beneath(on, THINK_THEN_TOOL)
+  beneath(on, { chunks: THINK_THEN_TOOL, toolUses: BASH })
   await drain($.turn.step(STEP))
   const t = await probe($)
-  expect(t?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'tool'])
+  expect(t?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'write', 'tool'])
   expect(t).toMatchObject({ blocks: 1, tools: 1 })
 })
 
-test('a later step starts by waiting on the model again', WITH_PROBE, async ($, on) => {
+test('a step with several tool calls writes them all, then runs them in one tool phase', WITH_PROBE, async ($, on) => {
   mock.clock(on)
-  beneath(on, THINK_THEN_TOOL, [{ kind: 'text', index: 0, text: 'done' }])
+  beneath(on, {
+    chunks: [
+      { kind: 'tool', index: 0, id: 'tu1', name: 'Read' },
+      { kind: 'input', index: 0, json: '{}' },
+      { kind: 'tool', index: 1, id: 'tu2', name: 'Bash' },
+      { kind: 'input', index: 1, json: '{}' },
+    ],
+    toolUses: [{ name: 'Read', input: {} }, ...BASH],
+  })
+  await drain($.turn.step(STEP))
+  const t = await probe($)
+  expect(t?.spans.map(s => s.phase)).toEqual(['wait', 'write', 'tool'])
+  expect(t?.tools).toBe(2)
+})
+
+test('a step whose result names no tool calls never enters the tool phase, though a tool chunk streamed', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, THINK_THEN_TOOL)
+  await drain($.turn.step(STEP))
+  expect((await probe($))?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'write'])
+})
+
+test('a step whose stream reported no tool chunk still enters the tool phase for the calls its result names', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, { chunks: [], toolUses: BASH })
+  await drain($.turn.step(STEP))
+  expect((await probe($))?.spans.map(s => s.phase)).toEqual(['wait', 'tool'])
+})
+
+test('a later step starts by waiting on the model again, which ends the tool phase', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  beneath(on, { chunks: THINK_THEN_TOOL, toolUses: BASH }, [{ kind: 'text', index: 0, text: 'done' }])
   await drain($.turn.step(STEP))
   await drain($.turn.step({ ...STEP, index: 1 }))
-  expect((await probe($))?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'tool', 'wait', 'write'])
+  expect((await probe($))?.spans.map(s => s.phase)).toEqual(['wait', 'think', 'write', 'tool', 'wait', 'write'])
 })
 
 test('the ticker moves the clock on between steps and stops at turn.complete', WITH_PROBE, async ($, on) => {
