@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { ModelCompleteRequest, ModelCompleteResult, On } from 'claude-code'
+import type { ModelCompleteRequest, ModelCompleteResult, On, ToolCallResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import type { ShadowRecord } from './shadow-judge'
@@ -12,7 +12,7 @@ const THINKING = 'Actually, the engine never hands tool results to turn.step chu
 const KEEP = '{"verdicts":[{"i":0,"verdict":"keep","fact":"dreeft: tool results reach tool.call only.","type":"project","name":"tool-results-in-tool-call","topic":"context-dreeft","keywords":["tool.call"],"importance":"high","reason":"gotcha"}]}'
 
 /** The world beneath the mod: the model, the shell, the session; records what the mod asked of them. */
-function world(on: On, over: { home?: string | null; remote?: string; appendExit?: number; reply?: ModelCompleteResult } = {}) {
+function world(on: On, over: { home?: string | null; remote?: string; appendExit?: number; reply?: ModelCompleteResult; judge?: () => Promise<ModelCompleteResult> } = {}) {
   const asked: ModelCompleteRequest[] = []
   const appended: string[] = []
   const argvs: string[][] = []
@@ -28,7 +28,7 @@ function world(on: On, over: { home?: string | null; remote?: string; appendExit
   on('session.cwd', async () => ({ value: '/repo/.worktrees/x' }))
   on('model.complete', async (_$, e) => {
     asked.push(e)
-    return { value: over.reply ?? { isAnswered: true, text: KEEP, usage: USAGE } }
+    return { value: (await over.judge?.()) ?? over.reply ?? { isAnswered: true, text: KEEP, usage: USAGE } }
   })
   on('process.run', async (_$, e) => {
     argvs.push([...e.argv])
@@ -172,4 +172,73 @@ test('a main-loop tool result that names the claim confirms it', ON, async ($, o
   await w.clock.settle()
   const [record] = recordsOf(w.appended)
   expect(record).toMatchObject({ source: 'hedge', confirmed: true, evidence: { from: 'tool', tool: 'Bash', snippet: out } })
+})
+
+const CLAIM = 'Actually, the log file name lives in register.tsx and nowhere else at all.'
+const GREP = { tool: 'Bash', command: 'grep -n LOG_FILE hooks/register.tsx' } as const
+const FOUND = 'hooks/register.tsx:12 const LOG_FILE'
+
+/** A turn that thinks `CLAIM`, runs `call` between its two steps, and completes. */
+async function turnAround($: Engine, on: On, call: () => Promise<unknown>) {
+  beneath(on,
+    [{ kind: 'thinking', index: 0, text: CLAIM }, { kind: 'tool', index: 1, id: 'u1', name: 'Bash' }],
+    [{ kind: 'text', index: 0, text: 'Done.' }],
+  )
+  await drain($.turn.step(STEP))
+  await call()
+  await drain($.turn.step({ ...STEP, index: 1 }))
+  return complete($, { answer: 'Done.' })
+}
+
+test('a subagent\'s tool result never enters the shadow buffer', ON, async ($, on) => {
+  const w = world(on)
+  on('tool.call', async () => ({ result: { stdout: FOUND, stderr: '', interrupted: false }, text: FOUND }))
+  const inSubagent = { ...GREP, agentId: 'sub1' }
+  await turnAround($, on, () => $.tool.call(inSubagent))
+  await w.clock.settle()
+  expect(recordsOf(w.appended)).toMatchObject([{ source: 'hedge', confirmed: false }])
+})
+
+test('a tool result whose text is not a string returns unchanged and leaves the turn to complete and be judged', ON, async ($, on) => {
+  const w = world(on)
+  // Parsed, as a plugin beneath hands it up: the engine lets a `text` that is no string through.
+  const below: ToolCallResult = JSON.parse(JSON.stringify({ result: { stdout: FOUND, stderr: '', interrupted: false }, text: 42 }))
+  on('tool.call', async () => below)
+  let result: unknown
+  const done = await turnAround($, on, async () => {
+    result = await $.tool.call(GREP)
+  })
+  await w.clock.settle()
+  expect(result).toEqual(below)
+  expect(done.text).toBe('Done.')
+  expect(w.logged).toEqual([])
+  expect(recordsOf(w.appended)).toMatchObject([{ source: 'hedge', confirmed: false }])
+})
+
+test('a judge call that never settles delays neither turn.complete nor the next turn', ON, async ($, on) => {
+  const w = world(on, { judge: () => new Promise(() => {}) })
+  beneath(on, [{ kind: 'thinking', index: 0, text: THINKING }, { kind: 'text', index: 1, text: 'Done.' }], [{ kind: 'text', index: 0, text: 'Next.' }])
+  await drain($.turn.step(STEP))
+  expect((await complete($, { answer: 'Done.' })).text).toBe('Done.')
+  await w.clock.settle()
+  expect(w.asked).toHaveLength(1)
+  expect(w.appended).toHaveLength(0)
+  const next: unknown[] = []
+  for await (const c of $.turn.step({ ...STEP, turnId: 't2' })) next.push(c)
+  expect(next).toEqual([{ kind: 'text', index: 0, text: 'Next.' }])
+  expect((await complete($, { turnId: 't2', answer: 'Next.' })).text).toBe('Next.')
+})
+
+test('a judge call that throws is reported to the debug log and breaks nothing', ON, async ($, on) => {
+  const w = world(on, {
+    judge: async () => {
+      throw new Error('judge is down')
+    },
+  })
+  await turnWith($, on, THINKING)
+  expect((await complete($, { answer: 'Done.' })).text).toBe('Done.')
+  await w.clock.settle()
+  expect(w.appended).toHaveLength(0)
+  // The engine skips the hook that threw, so the mod's call rejects with nothing left to answer it.
+  expect(w.logged).toEqual([expect.stringContaining('memory shadow: HooksError')])
 })

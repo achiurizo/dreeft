@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { On, SessionContextUsage, TurnStepChunk } from 'claude-code'
+import type { On, SessionContextUsage, TurnStepChunk, TurnStepResult } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { STEP, WITH_PROBE, answerBelow, beneath, complete, drain, measure, probe, stop } from './testkit'
@@ -127,4 +127,44 @@ test('when every state write throws, steps still pass each chunk through and tur
   expect(second).toEqual([{ kind: 'text', index: 0, text: 'done' }])
   expect(await complete($, {})).toEqual({ text: '' })
   expect(await probe($)).toBeNull()
+})
+
+test('a null tool call in a step result costs neither the stream, the result, nor the other calls\' focus names', WITH_PROBE, async ($, on) => {
+  mock.clock(on)
+  const read = { name: 'Read', input: { file_path: '/repo/hooks/lib.ts' } }
+  // Parsed, as a plugin beneath hands it up: the engine checks that `toolUses` is there, not what it holds.
+  const result: TurnStepResult = JSON.parse(JSON.stringify({ turnId: 't1', index: 0, answer: '', toolUses: [null, read, read], stopReason: 'tool_use', usage: null }))
+  on('turn.step', async function* () {
+    yield* CHUNKS
+    return result
+  })
+  const out: TurnStepChunk[] = []
+  const stream = $.turn.step(STEP)
+  let step = await stream.next()
+  while (!step.done) {
+    out.push(step.value)
+    step = await stream.next()
+  }
+  expect(out).toEqual(CHUNKS)
+  expect(step.value).toEqual(result)
+  expect((await probe($))?.focus).toEqual([{ t: 'metaRow', n: 1 }, { t: 'lib.ts', n: 2 }])
+})
+
+test('when state writes start failing mid-turn, session.start and session.compact still pass through', WITH_PROBE, async ($, on) => {
+  const clock = mock.clock(on)
+  sessionBelow(on)
+  const messages = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
+  on('session.compact', async () => ({ messages }))
+  let failing = false
+  on('state.set', async (_$, e, next) => next(failing ? Object.assign({}, e, { value: undefined }) : e))
+  beneath(on, [{ kind: 'tool', index: 0, id: 'tu1', name: 'Bash' }])
+  await drain($.turn.step(STEP))
+  const before = await probe($)
+  failing = true
+  // The turn is still running, so session.start restarts the ticker and each tick's write fails too.
+  expect(await startSession($)).toEqual({ cwd: '/repo' })
+  expect(await $.session.compact({ trigger: 'manual', messages })).toEqual({ messages })
+  await clock.advance(2000)
+  expect(await probe($)).toEqual(before)
+  expect(await probe($, 'trail')).toBeNull()
 })
