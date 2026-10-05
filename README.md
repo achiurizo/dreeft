@@ -249,7 +249,9 @@ jq -sc 'group_by([.session, .turn, .threshold])[] | select(length == 2) | add | 
 
 With `XDG_STATE_HOME` set to an absolute path, read `$XDG_STATE_HOME/dreeft/steer.jsonl` instead.
 
-What has not been checked: the stored row itself. The mod's tests run on Claude Code's test kit, which has no conversation to append to, so they cover the trigger, the coin, the log, the band's mark and an append that fails. Nobody has yet run `steer` at `on` in a real session and looked at the row, the notice and the turn's next request.
+What has been checked, and how far. The mod's tests run on Claude Code's test kit, which has no conversation to append to, so they cover the trigger, the coin, the log, the band's mark and an append that fails. The stored row was checked by hand in one real session on Claude Code 2.1.289, run without a terminal (`claude -p`): the note was stored after the tool results of the response that triggered it, the turn's next request succeeded and the turn completed, the notice was stored as a transcript notice, and the log held a held trigger, a fired trigger and both outcomes. Not checked: the band's mark and the notice as drawn in a terminal, and any effect on what the model does.
+
+A turn triggers only when its growth is measured. The first turn of a session has no starting size to grow from, so it never triggers.
 
 </details>
 
