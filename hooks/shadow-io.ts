@@ -19,12 +19,15 @@ export type ShadowIo = {
   complete: EngineInterface['model']['complete']
   /** `$HOME`, when set. */
   home: () => ReturnType<EngineInterface['env']['get']>
+  /** `$XDG_STATE_HOME`, when set. */
+  stateHome: () => ReturnType<EngineInterface['env']['get']>
 }
 
 /** The cheapest model the judge may use: an alias, so each provider resolves its own id. */
 const JUDGE_MODEL = 'haiku'
-/** The log, under `$HOME`. */
-const LOG_DIR = '.local/state/dreeft'
+/** The log's directory, under `$XDG_STATE_HOME` or its default under `$HOME`. */
+const STATE_DEFAULT = '.local/state'
+const LOG_DIR = 'dreeft'
 const LOG_FILE = 'memory-shadow.jsonl'
 
 /** The project's name and its main checkout. */
@@ -47,8 +50,24 @@ async function locate(io: ShadowIo): Promise<Where> {
   return { project: projectOf(remote, root.split('/').filter(Boolean).at(-1) || cwd), root }
 }
 
-/** Owner-only: the log quotes the session's thinking and tool results. */
-const APPEND = 'umask 077 && mkdir -p "$1" && chmod 700 "$1" && cat >> "$1/$2"'
+/** Absolute only: a relative base would put the log in the session's directory, and one starting with `-` reads as an option. */
+const isAbsolute = (path: string | undefined): path is string => path !== undefined && path.startsWith('/')
+
+/** Where the log's directory is: under an absolute `$XDG_STATE_HOME`, else under `$HOME`. Throws when neither can be used. */
+async function logDir(io: ShadowIo): Promise<string> {
+  const [stateHome, home] = await Promise.all([io.stateHome(), io.home()])
+  if (isAbsolute(stateHome)) return `${stateHome}/${LOG_DIR}`
+  if (!home) throw new Error('HOME is not set, so there is no log to write')
+  if (!isAbsolute(home)) throw new Error('HOME is not an absolute path, so there is no log to write')
+  return `${home}/${STATE_DEFAULT}/${LOG_DIR}`
+}
+
+/**
+ * Owner-only: the log quotes the session's thinking and tool results. Missing parents are made
+ * before the umask, so they get the user's own; the file is tightened before the write, since
+ * the umask leaves a file that already exists as it was.
+ */
+const APPEND = 'mkdir -p -- "${1%/*}" && umask 077 && mkdir -p -- "$1" && chmod 700 -- "$1" && : >> "$1/$2" && chmod 600 -- "$1/$2" && cat >> "$1/$2"'
 
 /** Appends lines to the log with `>>`, so concurrent sessions never drop each other's records. */
 async function append(io: ShadowIo, dir: string, lines: string): Promise<void> {
@@ -65,10 +84,7 @@ export async function judgeTurn(io: ShadowIo, done: ShadowTurn, seen: Set<string
   const candidates = selectCandidates(done).filter(c => !seen.has(c.term ?? c.span))
   if (candidates.length === 0) return
   // Before the judge call: with nowhere to log, the call would be paid for nothing.
-  const home = await io.home()
-  if (!home) throw new Error('HOME is not set, so there is no log to write')
-  if (seen.size >= SEEN_MAX) seen.clear()
-  candidates.forEach(c => seen.add(c.term ?? c.span))
+  const dir = await logDir(io)
   where ??= locate(io).catch(err => {
     where = undefined // a failed lookup is tried again next turn
     throw err
@@ -91,5 +107,8 @@ export async function judgeTurn(io: ShadowIo, done: ShadowTurn, seen: Set<string
     ? parseVerdicts(reply.text, candidates.length)
     : candidates.map(() => failed(`judge call failed: ${reply.reason}`))
   const records = buildRecords({ ts: new Date(now).toISOString(), session, turn: done.turnId, project, root }, candidates, verdicts, judge)
-  await append(io, `${home}/${LOG_DIR}`, records.map(r => `${JSON.stringify(r)}\n`).join(''))
+  await append(io, dir, records.map(r => `${JSON.stringify(r)}\n`).join(''))
+  // Only once logged: a turn whose lookup, judge call or append failed is judged again when its span repeats.
+  if (seen.size >= SEEN_MAX) seen.clear()
+  candidates.forEach(c => seen.add(c.term ?? c.span))
 }
