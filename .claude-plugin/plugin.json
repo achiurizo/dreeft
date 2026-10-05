@@ -22,44 +22,25 @@
       "type": "string",
       "title": "Timeline colors",
       "description": "How thinking and tool cells are colored. mono uses brightness only; amber, blue and magenta color thinking (magenta also colors tools cyan).",
-      "default": "mono",
-      "options": [
-        "mono",
-        "amber",
-        "blue",
-        "magenta"
-      ]
+      "default": "mono"
     },
     "memoryShadow": {
       "type": "string",
       "title": "Memory shadow log (experimental)",
-      "description": "on: after each main-loop turn, pick candidate facts from the thinking, judge them with Haiku (one call per turn with candidates) and append the verdicts to ~/.local/state/dreeft/memory-shadow.jsonl. Never writes memory.",
-      "default": "off",
-      "options": [
-        "off",
-        "on"
-      ]
+      "description": "off or on. on: after each main-loop turn, pick candidate facts from the thinking, judge them with Haiku (one call per turn with candidates) and append the verdicts to ~/.local/state/dreeft/memory-shadow.jsonl. Never writes memory.",
+      "default": "off"
     },
     "desktop": {
       "type": "string",
       "title": "Band on the desktop app (experimental)",
-      "description": "on: also draw the band in the Claude Code desktop app. Untested: nobody has checked how the band draws there. off draws on the terminal only. VS Code and mobile never get the band.",
-      "default": "off",
-      "options": [
-        "off",
-        "on"
-      ]
+      "description": "off or on. on: also draw the band in the Claude Code desktop app. Untested: nobody has checked how the band draws there. off draws on the terminal only. VS Code and mobile never get the band.",
+      "default": "off"
     },
     "steer": {
       "type": "string",
       "title": "Steering (experimental)",
-      "description": "Changes what the model reads. When a turn has grown the context by 10 points of the window, and again at 20, a coin flip picks fire or hold. shadow: every trigger holds; each is appended to ~/.local/state/dreeft/steer.jsonl and nothing is sent. on: a fire also appends one hidden two-sentence note to the conversation, which the model reads, and a visible notice of it; both arms are logged. off sends and writes nothing.",
-      "default": "off",
-      "options": [
-        "off",
-        "shadow",
-        "on"
-      ]
+      "description": "off, shadow or on. Changes what the model reads. When a turn has grown the context by 10 points of the window, and again at 20, a coin flip picks fire or hold. shadow: every trigger holds; each is appended to ~/.local/state/dreeft/steer.jsonl and nothing is sent. on: a fire also appends one hidden two-sentence note to the conversation, which the model reads, and a visible notice of it; both arms are logged. off sends and writes nothing.",
+      "default": "off"
     }
   }
 }
