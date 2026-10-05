@@ -4,6 +4,7 @@
 import type { ToolCallInput, ToolCallResult, TurnCompleteInput, TurnStepChunk, TurnStepInput } from 'claude-code'
 
 import { toolTerms } from './focus'
+import { redactHead } from './shadow-candidates'
 
 /** What one main-loop turn left behind for the shadow pass. */
 export type ShadowTurn = {
@@ -61,7 +62,7 @@ export function createShadow(): Shadow {
     },
     tool: (e, result) => {
       if (!turn || turn.tools.length >= TOOLS_MAX || result.deny !== undefined) return
-      turn.tools.push({ name: e.tool, terms: toolTerms(e), text: (result.text ?? '').slice(0, RESULT_MAX), isError: result.isError === true })
+      turn.tools.push({ name: e.tool, terms: toolTerms(e), text: redactHead(result.text ?? '', RESULT_MAX), isError: result.isError === true })
     },
     complete: e => {
       const done = turn && turn.turnId === e.turnId ? turn : null
