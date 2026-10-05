@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
+import { SCAN } from './focus'
 import type { ShadowTurn, ToolEvidence } from './shadow'
-import { SPAN_MAX, findEvidence, hedgeSpans, redact, repeatedTerms, selectCandidates } from './shadow-candidates'
+import { SELECTION, SPAN_MAX, findEvidence, hedgeSpans, redact, repeatedTerms, selectCandidates } from './shadow-candidates'
 
 const tool = (over: Partial<ToolEvidence> = {}): ToolEvidence => ({ name: 'Bash', terms: [], text: '', isError: false, ...over })
 const turnOf = (over: Partial<ShadowTurn> = {}): ShadowTurn => ({ turnId: 't1', thinking: '', text: '', tools: [], ...over })
@@ -147,5 +148,16 @@ describe('selectCandidates', () => {
   })
   test('a name only tool calls repeated is not a candidate', () => {
     expect(selectCandidates(turnOf({ tools: [tool({ terms: ['a.ts'] }), tool({ terms: ['a.ts'] })] }))).toEqual([])
+  })
+})
+
+describe('SELECTION', () => {
+  test('holds the redaction shapes, so a change to what the log hides shows in the code stamp', () => {
+    expect(SELECTION).toContain('PRIVATE KEY')
+    expect(SELECTION).toContain('[redacted]')
+  })
+  test('holds the patterns that decide what a name is', () => {
+    expect(SELECTION).toContain(SCAN)
+    expect(SCAN).toContain('tsx?')
   })
 })

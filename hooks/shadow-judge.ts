@@ -82,14 +82,16 @@ export function fingerprint(parts: string[]): string {
   return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
-/** Bump on a change to selection or judging that `SELECTION` and `JUDGE_SYSTEM` do not show: logic, not a pattern, a limit or the rubric. */
+/** Bump on a change to selection or judging that the parts of `CODE` do not show: logic, not a pattern, a limit, the rubric or the message shape. */
 const REV = 1
 
 /**
- * The stamp on every record. Taken from the loaded module, not from the checkout: a session that
- * was running when the mod changed can keep old code, and the session id does not show it.
+ * The stamp on every record: the selection, the rubric and the shape of the judge's user message
+ * (its text for no project and no candidates). Taken from the loaded module, not from the
+ * checkout: a session that was running when the mod changed can keep old code, and the session
+ * id does not show it.
  */
-export const CODE = fingerprint([String(REV), SELECTION, JUDGE_SYSTEM])
+export const CODE = fingerprint([String(REV), SELECTION, JUDGE_SYSTEM, judgePrompt('', [])])
 
 /** The judge's one user message: the project and each candidate with its evidence. */
 export function judgePrompt(project: string, candidates: Candidate[]): string {

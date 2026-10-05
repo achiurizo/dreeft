@@ -1,7 +1,7 @@
 // Memory shadow mode (experimental): pick candidate facts from a turn's thinking, each with
 // its outcome evidence. Pure.
 
-import { FOCUS_MIN, HEDGE, scanThought } from './focus'
+import { FOCUS_MIN, HEDGE, SCAN, scanThought } from './focus'
 import type { ShadowTurn } from './shadow'
 
 /** Where outcome evidence came from: a tool result or the final answer. */
@@ -67,10 +67,15 @@ function sentences(text: string): { at: number; s: string }[] {
 const PLAN = /^[\s,.:;!-]*(let me|let's|i'll|i will|i need|i should|i want|i'm going|now|ok(ay)?\b|so\b)/i
 
 /**
- * Everything that decides which spans become candidates, as one string: the marker, the plan
- * filter and the limits. The log's code stamp is taken over it, so a change here shows in the log.
+ * Everything that decides which spans become candidates and what the log hides, as one string:
+ * the marker, the plan filter, the name patterns, the redaction shapes and the limits. The log's
+ * code stamp is taken over it, so a change here shows in the log.
  */
-export const SELECTION = [HEDGE.source, HEDGE.flags, PLAN.source, PLAN.flags, HEDGE_MAX, FOCUS_CANDIDATES, CANDIDATE_MAX, MIN_WORDS, FOCUS_MIN, SPAN_MAX, SNIPPET_MAX].join('\n')
+export const SELECTION = [
+  HEDGE.source, HEDGE.flags, PLAN.source, PLAN.flags, SCAN,
+  ...SECRETS.flatMap(([shape, to]) => [shape.source, shape.flags, to]),
+  HEDGE_MAX, FOCUS_CANDIDATES, CANDIDATE_MAX, MIN_WORDS, FOCUS_MIN, SPAN_MAX, SNIPPET_MAX,
+].join('\n')
 
 /**
  * Hedge-then-correction spans, the first `HEDGE_MAX`: from a second-guess marker through the end
