@@ -2,7 +2,7 @@
 
 # dreeft
 
-**See what your Claude Code session's thinking is doing, right above the prompt.**
+**Catch the drift of your Claude Code session's thinking, right above the prompt.**
 
 [![check](https://github.com/achiurizo/dreeft/actions/workflows/check.yml/badge.svg)](https://github.com/achiurizo/dreeft/actions/workflows/check.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
