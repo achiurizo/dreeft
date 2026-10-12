@@ -1,0 +1,30 @@
+name: Idea
+description: Something the band could show or do, or a change to what it does now
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you were doing, and what the band did not tell you or got in the way of.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Whole band (missing, width, alignment)
+        - Focus row
+        - Timeline row
+        - Meta row
+        - Settings or palette
+        - Memory shadow log
+        - Steering
+        - Install or update
+        - README or docs
+        - Not sure
