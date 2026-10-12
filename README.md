@@ -320,6 +320,21 @@ A few hooks and a one-second ticker. Every chunk passes through unchanged, and a
 
 </details>
 
+## Report a problem
+
+[Open an issue](https://github.com/achiurizo/dreeft/issues/new/choose) and pick a form: **Bug report** when the band, a row or a log does something other than what this README says, **Idea** for something the band could show or do.
+
+The bug form asks for two versions. Have them ready:
+
+```sh
+claude --version      # Claude Code's version: the form requires it
+claude plugin list    # dreeft's version, on the `Version:` line
+```
+
+For a clone install, dreeft's version is the `version` in `.claude-plugin/plugin.json`.
+
+An issue is public. The output of `claude --debug`, lines from the two logs and a screenshot of the band can hold file names, paths and text from your session, so remove what you would not publish before you paste. For a security problem, use the private report in [SECURITY.md](SECURITY.md), not an issue.
+
 ## Development
 
 The commands need Claude Code and Node.js, for `npx`. `npx` fetches the pinned TypeScript and bun, so you install neither.
