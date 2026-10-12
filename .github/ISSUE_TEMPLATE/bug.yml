@@ -1,0 +1,100 @@
+name: Bug report
+description: The band, a row or a log does something other than what the README says
+labels: [bug]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Whole band (missing, width, alignment)
+        - Focus row
+        - Timeline row
+        - Meta row
+        - Settings or palette
+        - Memory shadow log
+        - Steering
+        - Install or update
+        - README or docs
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: claude-code-version
+    attributes:
+      label: Claude Code version
+      description: The output of `claude --version`. A Claude Code update can break the mod, so this is the first thing checked.
+      placeholder: 2.1.296
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: input
+    id: dreeft-version
+    attributes:
+      label: dreeft version
+      description: The `Version:` line for dreeft in `claude plugin list`. For a clone install, the `version` in `.claude-plugin/plugin.json`.
+      placeholder: 1.4.4
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: VS Code and mobile never draw the band. The desktop app draws it only with the `desktop` setting on.
+      options:
+        - Terminal
+        - Desktop app
+        - Other
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Linux
+        - WSL
+        - Windows
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal emulator and multiplexer
+      placeholder: Ghostty, inside tmux
+  - type: dropdown
+    id: settings
+    attributes:
+      label: Settings changed from the default
+      multiple: true
+      options:
+        - palette changed
+        - memoryShadow on
+        - desktop on
+        - steer shadow or on
+        - thinking summaries on (showThinkingSummaries)
+  - type: markdown
+    attributes:
+      value: |
+        An issue here is public and stays public: an edit keeps the earlier text in the issue's history. The output of `claude --debug`, lines from `memory-shadow.jsonl` or `steer.jsonl`, and a screenshot of the band can all hold file names, paths and text from your session. Remove what you would not publish before you paste.
+  - type: textarea
+    id: debug-log
+    attributes:
+      label: Debug log
+      description: The lines from `claude --debug` that mention dreeft, or the log lines the bug is about.
+      render: text
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: Drag an image in, or paste the band's text.
